@@ -1,0 +1,21 @@
+# Portainer: Stacks → Add stack → paste this file.
+services:
+  simplevideofeed:
+    image: ghcr.io/elaktrato/simplevideofeed:latest
+    container_name: simplevideofeed
+    restart: unless-stopped
+    ports:
+      # Reachable on your home network and via Tailscale.
+      # Tailscale-only instead: "100.x.y.z:8080:8080" (your server's Tailscale IP).
+      - "8080:8080"
+    volumes:
+      # Database, downloaded videos and thumbnails live here.
+      - ./data:/data
+    environment:
+      TZ: Etc/UTC                    # your timezone, e.g. Europe/Berlin (only affects logs)
+      POLL_MINUTES: "30"             # how often to check channels for new uploads
+      MAX_HEIGHT: "720"              # max video resolution to download
+      RETENTION_DAYS: "14"           # delete every video this many days after upload
+      WATCHED_GRACE_HOURS: "24"      # delete watched videos this long after watching
+      MAX_CONCURRENT_DOWNLOADS: "1"
+      # YTDLP_COOKIES_FILE: /data/cookies.txt   # only if YouTube starts blocking downloads

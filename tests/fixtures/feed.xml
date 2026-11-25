@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <link rel="self" href="http://www.youtube.com/feeds/videos.xml?channel_id=UCabc"/>
+ <id>yt:channel:abc</id>
+ <yt:channelId>abc</yt:channelId>
+ <title>Bake Lab</title>
+ <entry>
+  <id>yt:video:AAAAAAAAAAA</id>
+  <yt:videoId>AAAAAAAAAAA</yt:videoId>
+  <yt:channelId>UCabc</yt:channelId>
+  <title>How I fixed my sourdough</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=AAAAAAAAAAA"/>
+  <published>2026-11-24T10:00:00+00:00</published>
+  <updated>2026-11-24T12:00:00+00:00</updated>
+  <media:group>
+   <media:title>How I fixed my sourdough</media:title>
+   <media:thumbnail url="https://i4.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg" width="480" height="360"/>
+  </media:group>
+ </entry>
+ <entry>
+  <id>yt:video:BBBBBBBBBBB</id>
+  <yt:videoId>BBBBBBBBBBB</yt:videoId>
+  <yt:channelId>UCabc</yt:channelId>
+  <title>Quick tip</title>
+  <link rel="alternate" href="https://www.youtube.com/shorts/BBBBBBBBBBB"/>
+  <published>2026-11-23T08:30:00+00:00</published>
+  <media:group>
+   <media:thumbnail url="https://i4.ytimg.com/vi/BBBBBBBBBBB/hqdefault.jpg" width="480" height="360"/>
+  </media:group>
+ </entry>
+</feed>
