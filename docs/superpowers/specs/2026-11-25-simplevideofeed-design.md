@@ -150,7 +150,10 @@ Schema details are the builder's; the above is the required information.
 - `/channels` Add channel (URL + group dropdown), list channels by group with
   last-checked time / error, change group, toggle Shorts, remove. Manage groups.
 - Removing a channel removes its videos and files.
-- Plain, calm styling; dark mode by default (via `prefers-color-scheme`). Large tap
+- Plain, calm styling using the **Tokyo Night** color palette (owner's choice): dark
+  "Night" variant always (bg `#1a1b26`, surface `#24283b`, fg `#c0caf5`, muted
+  `#565f89`, accent blue `#7aa2f7`, purple `#bb9af7`, cyan `#7dcfff`, green `#9ece6a`,
+  red `#f7768e`, orange `#ff9e64`). Colors defined once as CSS variables. Large tap
   targets for phone.
 
 ### Configuration (env vars)
@@ -179,4 +182,4 @@ Schema details are the builder's; the above is the required information.
 
 ## Left to the builder
 - Exact schema, module layout, scheduler choice, JS details, visual styling within the
-  "plain, calm, dark" brief, retry/backoff numbers, whether to keep a discreet source link.
+  "plain, calm, Tokyo Night" brief, retry/backoff numbers, whether to keep a discreet source link.
