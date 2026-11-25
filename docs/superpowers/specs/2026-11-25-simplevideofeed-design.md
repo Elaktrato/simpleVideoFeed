@@ -164,7 +164,7 @@ Schema details are the builder's; the above is the required information.
 - GitHub Actions: build & push multi-arch image on push to main and on tags, plus a
   **weekly scheduled rebuild** so the image picks up the latest yt-dlp. README explains
   "re-pull the image in Portainer to update yt-dlp."
-- **Network exposure (my call, pending owner confirmation):** the default compose uses a
+- **Network exposure (owner confirmed):** the default compose uses a
   plain `8080:8080` port mapping, so the app is reachable on the home LAN *and* via
   Tailscale (the host's Tailscale address). Anyone on the home network can open it; this
   is accepted since there's no auth by design. The README documents an optional stricter
