@@ -1,0 +1,38 @@
+{% macro media(v) %}
+  {% if v.thumbnail_path %}<img src="/thumbs/{{ v.youtube_video_id }}.jpg" alt="" loading="lazy">{% else %}<span class="ph"></span>{% endif %}
+  {% if v.duration_s %}<span class="dur">{{ v.duration_s | duration }}</span>{% endif %}
+  {% if v.status == 'pending' or v.status == 'downloading' %}<span class="dl">Downloading</span>
+  {% elif v.status == 'failed' %}<button type="button" class="retry" data-action="retry" data-id="{{ v.id }}" title="{{ v.error or '' }}"><svg class="i"><use href="#i-play"/></svg>Retry</button>{% endif %}
+  {% if v.duration_s and v.position_s and v.position_s > 0 %}<i class="prog" style="width:{{ [v.position_s / v.duration_s * 100, 100] | min | round(1) }}%"></i>{% endif %}
+{% endmacro %}
+{% if v is defined %}
+<article class="card" data-id="{{ v.id }}">
+  {% if v.status == 'ready' %}
+  <div class="thumb" data-action="play" data-id="{{ v.id }}" role="button" tabindex="0" aria-label="Play {{ v.title }}">{{ media(v) }}</div>
+  {% else %}
+  <div class="thumb">{{ media(v) }}</div>
+  {% endif %}
+  {% if v.in_queue %}
+  <span class="add in-queue" role="img" aria-label="In queue"><svg class="i"><use href="#i-check"/></svg></span>
+  {% else %}
+  <button type="button" class="add" data-action="queue" data-id="{{ v.id }}" aria-label="Add to queue"><svg class="i"><use href="#i-plus"/></svg></button>
+  {% endif %}
+  <div class="row2">
+    <div class="meta">
+      <div class="t">{{ v.title }}</div>
+      <div class="s">{{ v.channel_title }} · {{ v.published_at | age(now) }}</div>
+    </div>
+    <button type="button" class="more" data-action="menu" data-id="{{ v.id }}" aria-label="More actions" aria-haspopup="true" aria-expanded="false"><svg class="i"><use href="#i-dots"/></svg></button>
+  </div>
+  <div class="menu" hidden>
+    {% if v.status == 'ready' %}
+    <button type="button" data-action="play" data-id="{{ v.id }}"><svg class="i"><use href="#i-play"/></svg>Play</button>
+    {% endif %}
+    {% if v.status in ('ready', 'pending', 'downloading') %}
+    <button type="button" data-action="next" data-id="{{ v.id }}"><svg class="i"><use href="#i-playnext"/></svg>Play next</button>
+    {% endif %}
+    {% if not v.in_queue %}<button type="button" data-action="queue" data-id="{{ v.id }}"><svg class="i"><use href="#i-plus"/></svg>Add to queue</button>{% endif %}
+    <button type="button" data-action="watched" data-id="{{ v.id }}"><svg class="i"><use href="#i-check"/></svg>Mark watched</button>
+  </div>
+</article>
+{% endif %}

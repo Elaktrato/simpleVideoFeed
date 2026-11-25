@@ -4,6 +4,23 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-25
+
+### Added
+- Persistent player: videos keep playing while you browse, with a player bar at the bottom.
+- Full-screen player with ⏮ ⏯ ⏭, **✓ Done**, and an **Up next** list you can reorder or remove.
+- **Play next** to play a video right after the current one.
+- Lock-screen and headphone controls (Media Session).
+- **Poster Grid** look: the newest video as a large poster, the rest in a grid. Each card has a ⋯ menu with Play, Play next, Add to queue and Mark watched.
+- Undo after ✓ puts the video back in its place in the queue.
+- `/watch/{id}` links open the full-screen player, paused.
+
+### Changed
+- The queue now lives in the player. The separate Queue page is gone.
+- **+ Queue** adds to the end of the queue. Adding to an empty queue loads the video paused.
+- **▶ Play** on another video switches immediately. A paused current video moves to Up next instead of being dropped.
+- Fonts (Geist, Geist Mono, Space Grotesk) are bundled with the app. Nothing loads from third parties.
+
 ## [1.0.1] - 2026-11-25
 
 ### Changed

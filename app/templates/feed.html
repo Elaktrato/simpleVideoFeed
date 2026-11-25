@@ -1,54 +1,63 @@
 {% extends "base.html" %}
+{% from "_card.html" import media %}
 {% block title %}{{ 'Today' if tab == 'today' else 'This Week' }}{% endblock %}
 {% block content %}
+{% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
 {% set gq = ('&group=' ~ group_id) if group_id else '' %}
-<div class="tabs" role="tablist">
-  <a role="tab" href="/?tab=today{{ gq }}" class="tab {{ 'active' if tab == 'today' }}">Today ({{ counts.today }})</a>
-  <a role="tab" href="/?tab=week{{ gq }}" class="tab {{ 'active' if tab == 'week' }}">This Week ({{ counts.week }})</a>
-</div>
+<header class="hello">
+  <div>
+    <small>{{ weekday }} · {{ counts.week }} new this week</small>
+    <h1>Your feed</h1>
+  </div>
+  <a class="gear" href="/channels" aria-label="Channels"><svg class="i"><use href="#i-gear"/></svg></a>
+</header>
+<nav class="tabs" aria-label="Range">
+  <a href="/?tab=today{{ gq }}" class="{{ 'on' if tab == 'today' }}" {% if tab == 'today' %}aria-current="page"{% endif %}>Today<sup>{{ counts.today }}</sup></a>
+  <a href="/?tab=week{{ gq }}" class="{{ 'on' if tab == 'week' }}" {% if tab == 'week' %}aria-current="page"{% endif %}>This Week<sup>{{ counts.week }}</sup></a>
+</nav>
 
-{% if groups %}
+{% if groups or videos %}
 <div class="chips">
-  <a href="/?tab={{ tab }}" class="chip {{ 'active' if not group_id }}">All</a>
-  {% for g in groups %}
-  <a href="/?tab={{ tab }}&group={{ g.id }}" class="chip {{ 'active' if group_id == g.id }}">{{ g.name }}</a>
-  {% endfor %}
+  {% if groups %}
+  <a href="/?tab={{ tab }}" class="chip {{ 'on' if not group_id }}">All</a>
+  {% for g in groups %}<a href="/?tab={{ tab }}&group={{ g.id }}" class="chip {{ 'on' if group_id == g.id }}">{{ g.name }}</a>{% endfor %}
+  {% endif %}
+  {% if videos %}
+  <button type="button" class="chip addall" data-action="queue-all" data-ids="{{ videos | map(attribute='id') | join(',') }}"><svg class="i"><use href="#i-list"/></svg>Add all to queue</button>
+  {% endif %}
 </div>
 {% endif %}
 
 {% if videos %}
-<div class="bulk">
-  <button class="btn" data-action="queue-all" data-ids="{{ videos | map(attribute='id') | join(',') }}">Add all to queue</button>
-</div>
-<ul class="feed">
-  {% for v in videos %}
-  <li class="item" data-id="{{ v.id }}">
-    {% if v.status == 'ready' %}<a class="thumb" href="/watch/{{ v.id }}">{% else %}<div class="thumb">{% endif %}
-      {% if v.thumbnail_path %}<img src="/thumbs/{{ v.youtube_video_id }}.jpg" alt="" loading="lazy">{% else %}<span class="ph"></span>{% endif %}
-      {% if v.duration_s %}<span class="dur">{{ v.duration_s | duration }}</span>{% endif %}
-    {% if v.status == 'ready' %}</a>{% else %}</div>{% endif %}
-    <div class="meta">
-      <div class="title">{{ v.title }}</div>
-      <div class="sub">{{ v.channel_title }} · {{ v.published_at | age(now) }}{% if v.duration_s %} · {{ v.duration_s | duration }}{% endif %}</div>
-      <div class="actions">
-        {% if v.status == 'ready' %}
-          <a class="btn primary" href="/watch/{{ v.id }}">▶ Play</a>
-        {% elif v.status == 'failed' %}
-          <button class="btn danger" data-action="retry" data-id="{{ v.id }}" title="{{ v.error or '' }}">failed — retry</button>
-        {% else %}
-          <span class="btn ghost">downloading…</span>
-        {% endif %}
-        {% if v.in_queue %}
-          <span class="btn ghost">Queued</span>
-        {% else %}
-          <button class="btn" data-action="queue" data-id="{{ v.id }}">+ Queue</button>
-        {% endif %}
-        <button class="btn icon" data-action="watched" data-id="{{ v.id }}" aria-label="Mark as watched" title="Mark as watched">✓</button>
-      </div>
+{% set p = videos[0] %}
+<section class="feature" data-id="{{ p.id }}">
+  <div class="thumb">{{ media(p) }}</div>
+  <div class="shade"></div>
+  <div class="txt">
+    <span class="ch">{{ p.channel_title }} · {{ p.published_at | age(now) }}{% if p.duration_s %} · {{ p.duration_s | duration }}{% endif %}</span>
+    <span class="t">{{ p.title }}</span>
+    <div class="btns">
+      {% if p.status == 'ready' %}
+      <button type="button" class="pill go" data-action="play" data-id="{{ p.id }}"><svg class="i fill"><use href="#i-play"/></svg>Play</button>
+      {% endif %}
+      {% if p.status in ('ready', 'pending', 'downloading') %}
+      <button type="button" class="pill" data-action="next" data-id="{{ p.id }}"><svg class="i"><use href="#i-playnext"/></svg>Next</button>
+      {% endif %}
+      {% if p.in_queue %}
+      <span class="pill in-queue"><svg class="i"><use href="#i-check"/></svg>Queued</span>
+      {% else %}
+      <button type="button" class="pill" data-action="queue" data-id="{{ p.id }}"><svg class="i"><use href="#i-plus"/></svg>Queue</button>
+      {% endif %}
+      <button type="button" class="pill" data-action="watched" data-id="{{ p.id }}" aria-label="Mark as watched"><svg class="i"><use href="#i-check"/></svg></button>
     </div>
-  </li>
-  {% endfor %}
-</ul>
+  </div>
+</section>
+{% if videos | length > 1 %}
+<div class="grid2">
+  {% for v in videos[1:] %}{% include "_card.html" %}{% endfor %}
+</div>
 {% endif %}
-<p class="empty" {% if videos %}hidden{% endif %}>You're all caught up.</p>
+{% else %}
+<p class="empty">You're all caught up.</p>
+{% endif %}
 {% endblock %}

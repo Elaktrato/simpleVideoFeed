@@ -182,3 +182,41 @@ def test_retry_failed_resets_to_pending(env, settings, now):
     client.post(f"/api/videos/{v}/retry")
     row = repo.get_video(db, v)
     assert row["status"] == "pending" and row["attempts"] == 0
+
+
+def test_api_play_and_next(env, settings, now):
+    client, db, _ = env
+    a = ready_video(db, settings, now, "a")
+    b = ready_video(db, settings, now, "b")
+    c = ready_video(db, settings, now, "c")
+    client.post("/api/queue", json={"video_ids": [a, b]})
+    r = client.post("/api/queue/play", json={"video_id": c, "keep_current": True})
+    assert [x["id"] for x in r.json()] == [c, a, b]
+    r = client.post("/api/queue/next", json={"video_id": b})
+    assert [x["id"] for x in r.json()] == [c, b, a]
+    assert client.post("/api/queue/next", json={"video_id": 9999}).status_code == 404
+    assert client.post("/api/queue/play", json={"video_id": 9999}).status_code == 404
+
+
+def test_queue_json_has_thumb_duration_ready(env, settings, now):
+    client, db, _ = env
+    a = ready_video(db, settings, now, "a")
+    p = make_video(db, repo.get_channel(db, 1)["id"], "p", now - H, status="pending")
+    db.execute("UPDATE videos SET duration_s = 120, thumbnail_path = '/t/a.jpg' WHERE id = ?", (a,))
+    db.commit()
+    client.post("/api/queue", json={"video_ids": [a, p]})
+    q = client.get("/api/queue").json()
+    assert q[0]["thumb"] == "/thumbs/a.jpg" and q[0]["duration"] == 120 and q[0]["ready"] is True
+    assert q[1]["thumb"] is None and q[1]["duration"] is None and q[1]["ready"] is False
+
+
+def test_undo_with_queue_index_requeues(env, settings, now):
+    client, db, _ = env
+    a = ready_video(db, settings, now, "a")
+    b = ready_video(db, settings, now, "b")
+    client.post("/api/queue", json={"video_ids": [a, b]})
+    client.post(f"/api/videos/{a}/watched")
+    assert [x["id"] for x in client.get("/api/queue").json()] == [b]
+    assert client.request("DELETE", f"/api/videos/{a}/watched", json={"queue_index": 0}).status_code == 200
+    assert [x["id"] for x in client.get("/api/queue").json()] == [a, b]
+    assert repo.get_video(db, a)["watched_at"] is None
