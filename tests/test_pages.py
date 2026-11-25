@@ -254,3 +254,16 @@ def test_channels_has_back_link_and_version(env):
     html = client.get("/channels").text
     assert 'href="/"' in html and "Feed" in html
     assert f"v{__version__}" in html
+
+
+def test_shell_has_player_bar_and_sheet(env):
+    client, _ = env
+    html = client.get("/").text
+    player = html[html.index('<div id="player"'):html.index('id="toast"')]
+    assert 'class="mini"' in player and 'class="sheet"' in player
+    for action in ("expand", "queue", "toggle", "collapse", "restart", "skip", "done"):
+        assert f'data-p="{action}"' in player, action
+    assert "Up next" in player
+    assert player.count("<video") == 1  # the one <video> lives inside the player
+    for icon in ("i-pause", "i-restart", "i-skip", "i-chevron-down", "i-x"):
+        assert f'id="{icon}"' in html, icon
