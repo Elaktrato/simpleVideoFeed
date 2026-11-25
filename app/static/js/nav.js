@@ -16,26 +16,31 @@
     return !u.pathname.startsWith("/media/") && !u.pathname.startsWith("/thumbs/");
   }
 
-  async function load(url, { method = "GET", body = null, push = true, replace = false, restore = null } = {}) {
-    scrolls.set(key, window.scrollY);
+  // mode: "push" (new entry), "replace" (rewrite current entry), "pop" (history traversal), "reload".
+  async function load(url, { method = "GET", body = null, mode = "push", restore = 0, form = null } = {}) {
+    if (mode === "push") scrolls.set(key, window.scrollY);
     try {
       const res = await fetch(url, { method, body, redirect: "follow", headers: { "X-Requested-With": "nav" } });
       const type = res.headers.get("content-type") || "";
-      if (!type.includes("text/html")) throw new Error("not html");
+      if (!res.ok || !type.includes("text/html")) throw new Error("not a swappable page");
       const doc = new DOMParser().parseFromString(await res.text(), "text/html");
       const next = doc.getElementById("main");
       if (!next) throw new Error("no main");
       main().replaceWith(next);
       document.title = doc.title;
-      if (push || replace) {
+      if (mode === "push" || mode === "replace") {
         const state = { key: Date.now() + Math.random() };
-        history[replace ? "replaceState" : "pushState"](state, "", res.url);
+        history[mode === "replace" ? "replaceState" : "pushState"](state, "", res.url);
         key = state.key;
+      } else if (mode === "reload") {
+        history.replaceState({ key }, "", res.url);
       }
-      window.scrollTo(0, restore == null ? 0 : restore);
+      window.scrollTo(0, restore);
       document.dispatchEvent(new CustomEvent("nav:loaded"));
     } catch (e) {
-      location.assign(url);
+      if (form) form.submit(); // a failed POST must not be retried as a GET
+      else if (mode === "pop") location.reload();
+      else location.assign(url);
     }
   }
 
@@ -54,24 +59,26 @@
     if (msg && !confirm(msg)) { e.preventDefault(); return; }
     e.preventDefault();
     const action = new URL(form.getAttribute("action") || location.href, location.href);
+    const data = new URLSearchParams(new FormData(form, e.submitter));
     if ((form.method || "get").toLowerCase() === "post") {
-      load(action.href, { method: "POST", body: new URLSearchParams(new FormData(form)) });
+      load(action.href, { method: "POST", body: data, form });
     } else {
-      action.search = new URLSearchParams(new FormData(form)).toString();
-      load(action.href);
+      action.search = data.toString();
+      load(action.href, { form });
     }
   });
 
   window.addEventListener("popstate", (e) => {
+    scrolls.set(key, window.scrollY); // outgoing entry, under its own key
     const k = e.state && e.state.key;
     if (k) key = k;
-    load(location.href, { push: false, restore: scrolls.get(k) || 0 });
+    load(location.href, { mode: "pop", restore: scrolls.get(k) || 0 });
   });
 
   stamp();
   history.scrollRestoration = "manual";
   window.Nav = {
-    go: (url, opts = {}) => load(url, { replace: !!opts.replace, push: !opts.replace }),
-    reload: () => load(location.href, { push: false, restore: window.scrollY }),
+    go: (url, opts = {}) => load(url, { mode: opts.replace ? "replace" : "push" }),
+    reload: () => load(location.href, { mode: "reload", restore: window.scrollY }),
   };
 })();
