@@ -157,10 +157,16 @@ def create_app(
         return {"ok": True, "version": __version__}
 
     @app.delete("/api/videos/{video_id}/watched")
-    def unwatched(video_id: int, conn=Depends(db)):
+    async def unwatched(video_id: int, request: Request, conn=Depends(db)):
         if repo.get_video(conn, video_id) is None:
             return _err(404, "No such video")
+        try:
+            queue_index = int((await request.json())["queue_index"])
+        except (ValueError, KeyError, TypeError):
+            queue_index = None
         repo.unmark_watched(conn, video_id)
+        if queue_index is not None:
+            repo.queue_insert_at(conn, video_id, queue_index)
         return {"ok": True, "version": __version__}
 
     @app.post("/api/videos/{video_id}/progress")
@@ -194,6 +200,9 @@ def create_app(
                 "channel": r["channel_title"],
                 "status": r["status"],
                 "position": r["position_s"],
+                "thumb": f"/thumbs/{r['youtube_video_id']}.jpg" if r["thumbnail_path"] else None,
+                "duration": r["duration_s"],
+                "ready": r["status"] == "ready" and r["file_path"] is not None,
                 "src": f"/media/{r['youtube_video_id']}.mp4" if r["file_path"] else None,
             }
             for r in repo.queue_list(conn)
@@ -210,6 +219,29 @@ def create_app(
         except (ValueError, KeyError, TypeError):
             return _err(400, "Expected {video_ids: [int]}")
         repo.queue_add(conn, ids)
+        return _queue_json(conn)
+
+    @app.post("/api/queue/play")
+    async def queue_play(request: Request, conn=Depends(db)):
+        try:
+            body = await request.json()
+            video_id, keep = int(body["video_id"]), bool(body.get("keep_current", False))
+        except (ValueError, KeyError, TypeError):
+            return _err(400, "Expected {video_id, keep_current}")
+        if repo.get_video(conn, video_id) is None:
+            return _err(404, "No such video")
+        repo.queue_play_now(conn, video_id, keep)
+        return _queue_json(conn)
+
+    @app.post("/api/queue/next")
+    async def queue_next(request: Request, conn=Depends(db)):
+        try:
+            video_id = int((await request.json())["video_id"])
+        except (ValueError, KeyError, TypeError):
+            return _err(400, "Expected {video_id}")
+        if repo.get_video(conn, video_id) is None:
+            return _err(404, "No such video")
+        repo.queue_play_next(conn, video_id)
         return _queue_json(conn)
 
     @app.post("/api/queue/{video_id}/move")
