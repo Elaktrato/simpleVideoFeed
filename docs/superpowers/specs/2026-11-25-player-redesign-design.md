@@ -78,7 +78,8 @@ The anti-scroll goals of v1 still apply: a finite feed, no recommendations, noth
 
 ## Constraints
 - Single user. Queue and positions stay server-side, so a queue started on the phone continues on a laptop.
-- Must work in iOS Safari: `playsinline`, autoplay only after a user gesture (the first ▶ tap). Subsequent auto-advance in the same `<video>` is allowed.
+- Targets Chrome on Android and desktop browsers (owner's devices; iPhone/Safari is not a target). Playback starts only from a user tap; auto-advance in the same `<video>` is allowed.
+- **Background playback on Android (owner requirement):** audio keeps playing when switching apps or locking the screen, the queue auto-advances in the background, and lock-screen / notification controls (play, pause, previous, next, seek, scrubber) work via Media Session.
 - **Fonts are self-hosted** as woff2 in `app/static/fonts/` (Geist, Geist Mono, Space Grotesk, Latin subsets). The app sits behind Tailscale, and "nothing from third parties at runtime" holds. *My call.*
 - Keep the page usable at 360px width with no horizontal scroll.
 
@@ -144,6 +145,6 @@ The anti-scroll goals of v1 still apply: a finite feed, no recommendations, noth
 ## Decisions after builder review (my calls, pending owner's read)
 - **"Current" = the first *downloaded* item in the queue.** Items still downloading keep their place and are passed over until they're ready. If nothing queued is ready, the bar shows item 1 with "Downloading…" and ⏯ disabled. Play next inserts right after current.
 - **90% still marks a video watched** (v1 rule), but the *current* item stays in the queue until `ended`, ✓ Done or ⏭. `save_progress` stops removing the current item from the queue, and the queue JSON includes it even when it's watched.
-- **`/watch/{id}`** renders the feed with the expanded player open and that video loaded **paused**, because iOS needs a tap. It uses the same queue rule as ▶ Play.
+- **`/watch/{id}`** renders the feed with the expanded player open and that video loaded **paused**, because playback should only start from a tap. It uses the same queue rule as ▶ Play.
 - **Undo after ✓** restores the video to its previous queue position: the client sends the position it had. ✓ on the current item from a card behaves like ✓ Done and advances.
 - **▶ Play when the current item is paused or was never started (owner's decision):** the new video becomes current and the old one moves to **up next** (position 2), so nothing queued silently disappears. Only a video that is *playing* at that moment leaves the queue, as decided earlier. The client tells the server which case applies: `POST /api/queue/play {video_id, keep_current: bool}`.
