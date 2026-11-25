@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS videos (
     status TEXT NOT NULL DEFAULT 'pending',
     error TEXT,
     attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at INTEGER NOT NULL DEFAULT 0,
     watched_at INTEGER,
     position_s REAL NOT NULL DEFAULT 0
 );

@@ -113,11 +113,11 @@ def test_download_success_sets_ready(conn, settings, now):
     yt = FakeYT()
     c = make_channel(conn, now)
     v = make_video(conn, c, "d", now - H, status="pending")
-    assert jobs.download_one(conn, settings, yt) is True
+    assert jobs.download_one(conn, settings, yt, now) is True
     row = repo.get_video(conn, v)
     assert row["status"] == "ready"
     assert row["file_path"] == str(settings.videos_dir / "d.mp4")
-    assert jobs.download_one(conn, settings, yt) is False
+    assert jobs.download_one(conn, settings, yt, now) is False
 
 
 def test_download_retries_then_failed(conn, settings, now):
@@ -125,11 +125,13 @@ def test_download_retries_then_failed(conn, settings, now):
     c = make_channel(conn, now)
     v = make_video(conn, c, "f", now - H, status="pending")
     yt.download_errors["f"] = [YouTubeError("bot check") for _ in range(3)]
+    t = now
     for expected in ("pending", "pending", "failed"):
-        jobs.download_one(conn, settings, yt)
+        jobs.download_one(conn, settings, yt, t)
         assert repo.get_video(conn, v)["status"] == expected
+        t = repo.get_video(conn, v)["next_attempt_at"]
     assert repo.get_video(conn, v)["error"] == "bot check"
-    assert jobs.download_one(conn, settings, yt) is False
+    assert jobs.download_one(conn, settings, yt, t + 10**6) is False
 
 
 def test_cleanup_watched_after_grace(conn, settings, now):

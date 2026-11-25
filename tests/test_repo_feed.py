@@ -99,7 +99,13 @@ def test_next_pending_respects_attempts(conn, now):
     c = make_channel(conn, now)
     a = make_video(conn, c, "a", now - 2 * H, status="pending")
     b = make_video(conn, c, "b", now - H, status="pending")
-    assert repo.next_pending(conn)["id"] == a
     for _ in range(3):
         repo.bump_attempts(conn, a)
-    assert repo.next_pending(conn)["id"] == b
+    assert repo.claim_next_pending(conn, now)["id"] == b
+
+
+def test_claim_next_pending_oldest_first(conn, now):
+    c = make_channel(conn, now)
+    a = make_video(conn, c, "a", now - 2 * H, status="pending")
+    make_video(conn, c, "b", now - H, status="pending")
+    assert repo.claim_next_pending(conn, now)["id"] == a

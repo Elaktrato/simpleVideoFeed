@@ -153,6 +153,7 @@ const Queue = {
   video: document.getElementById("qplayer"),
   list: document.getElementById("queue-list"),
   currentId: null,
+  skipped: new Set(),  // videos that failed to play this session
 
   render(items) {
     setQueueCount(items.length);
@@ -186,7 +187,7 @@ const Queue = {
   },
 
   playFirst(items) {
-    const next = items.find((v) => v.src);
+    const next = items.find((v) => v.src && !this.skipped.has(v.id));
     const wrap = document.getElementById("qplayer-wrap");
     const now = document.getElementById("qnow");
     if (!next) {
@@ -194,7 +195,9 @@ const Queue = {
       this.video.removeAttribute("src");
       this.video.load();
       wrap.hidden = true;
-      now.textContent = items.length ? "Waiting for downloads…" : "";
+      const waiting = items.some((v) => !v.src);
+      now.textContent = waiting ? "Waiting for downloads…"
+        : items.length ? "Couldn't play the rest of the queue." : "";
       this.render(items);
       return;
     }
@@ -212,6 +215,12 @@ const Queue = {
     trackProgress(this.video, () => this.currentId, async () => {
       const items = await api("GET", "/api/queue");
       this.playFirst(items.filter((v) => v.id !== this.currentId));
+    });
+    this.video.addEventListener("error", async () => {
+      if (!this.currentId) return;
+      this.skipped.add(this.currentId);
+      toast("Couldn't play that one, skipping");
+      this.playFirst(await api("GET", "/api/queue"));
     });
     this.playFirst(await api("GET", "/api/queue"));
   },

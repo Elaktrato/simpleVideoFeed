@@ -95,12 +95,14 @@ def poll_all(conn: sqlite3.Connection, settings: Settings, yt, now: int) -> None
             repo.record_channel_check(conn, channel["id"], now, f"Unexpected error: {e}")
 
 
-def download_one(conn: sqlite3.Connection, settings: Settings, yt) -> bool:
-    """Download the oldest pending video. Returns False if there was nothing to do."""
-    video = repo.next_pending(conn)
+RETRY_BASE_SECONDS = 600  # 10 min, doubling per attempt
+
+
+def download_one(conn: sqlite3.Connection, settings: Settings, yt, now: int) -> bool:
+    """Download the oldest eligible pending video. Returns False if there was nothing to do."""
+    video = repo.claim_next_pending(conn, now)
     if video is None:
         return False
-    repo.set_status(conn, video["id"], "downloading")
     try:
         path = yt.download_video(
             video["youtube_video_id"], settings.videos_dir, settings.max_height, settings.cookies_file
@@ -108,6 +110,7 @@ def download_one(conn: sqlite3.Connection, settings: Settings, yt) -> bool:
     except Exception as e:
         attempts = repo.bump_attempts(conn, video["id"])
         status = "failed" if attempts >= repo.MAX_ATTEMPTS else "pending"
+        repo.set_next_attempt(conn, video["id"], now + RETRY_BASE_SECONDS * 2 ** (attempts - 1))
         repo.set_status(conn, video["id"], status, error=str(e))
         log.info("download of %s failed (%d): %s", video["youtube_video_id"], attempts, e)
         return True

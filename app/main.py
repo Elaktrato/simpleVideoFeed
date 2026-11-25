@@ -95,7 +95,7 @@ def create_app(
     async def download_loop():
         while True:
             try:
-                did = await asyncio.to_thread(_with_db, lambda c: jobs.download_one(c, settings, yt))
+                did = await asyncio.to_thread(_with_db, lambda c: jobs.download_one(c, settings, yt, now()))
             except Exception:
                 log.exception("download loop error")
                 did = False

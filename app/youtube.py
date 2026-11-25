@@ -62,13 +62,18 @@ def _normalize_channel_url(url: str) -> str:
 
 def resolve_channel(url: str, cookies_file: str | None) -> ChannelInfo:
     url = _normalize_channel_url(url)
-    opts = {**_base_opts(cookies_file), "extract_flat": True, "playlistend": 1}
+    path = urlparse(url).path.rstrip("/")
+    if path == "/playlist":
+        raise YouTubeError("That's a playlist link — paste a channel or video link")
+    opts = {**_base_opts(cookies_file), "extract_flat": True, "playlistend": 1, "noplaylist": True}
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False, process=False) or {}
     except Exception as e:  # yt-dlp raises many types
         log.info("resolve_channel failed for %s: %s", url, e)
         raise YouTubeError("Couldn't find a channel at that link") from e
+    if info.get("_type") == "playlist" and str(info.get("id", ""))[:2] in ("PL", "OL", "UU", "LL", "FL", "RD"):
+        raise YouTubeError("That's a playlist link — paste a channel or video link")
     cid = info.get("channel_id")
     if not (isinstance(cid, str) and cid.startswith("UC")):
         cid = next(
@@ -103,7 +108,9 @@ def fetch_feed(url: str) -> str:
 
 def fetch_meta(video_id: str, cookies_file: str | None) -> VideoMeta:
     try:
-        with yt_dlp.YoutubeDL(_base_opts(cookies_file)) as ydl:
+        # Upcoming premieres/streams have no formats yet; still return their live_status.
+        opts = {**_base_opts(cookies_file), "ignore_no_formats_error": True, "noplaylist": True}
+        with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(
                 f"https://www.youtube.com/watch?v={video_id}", download=False, process=False
             ) or {}
@@ -142,6 +149,11 @@ def ydl_download_opts(video_id: str, videos_dir: Path, max_height: int, cookies_
             f"/bv*[height<={h}]+ba/b[height<={h}]"
         ),
         "merge_output_format": "mp4",
+        # Formats that weren't merged (e.g. a single webm) still end up as .mp4.
+        "postprocessors": [{"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"}],
+        # Backstop: never record a stream that is live right now.
+        "match_filter": yt_dlp.utils.match_filter_func("!is_live"),
+        "noplaylist": True,
         "outtmpl": str(videos_dir / "%(id)s.%(ext)s"),
     }
 

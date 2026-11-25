@@ -164,12 +164,25 @@ def set_thumbnail(conn: sqlite3.Connection, video_id: int, path: str) -> None:
     conn.commit()
 
 
-def next_pending(conn: sqlite3.Connection) -> sqlite3.Row | None:
-    return conn.execute(
-        "SELECT * FROM videos WHERE status = 'pending' AND attempts < ?"
-        " ORDER BY published_at ASC LIMIT 1",
-        (MAX_ATTEMPTS,),
+def claim_next_pending(conn: sqlite3.Connection, now: int) -> sqlite3.Row | None:
+    """Atomically pick the oldest downloadable video and mark it 'downloading'.
+
+    Safe with several download workers on separate connections.
+    """
+    row = conn.execute(
+        "UPDATE videos SET status = 'downloading' WHERE id = ("
+        "  SELECT id FROM videos WHERE status = 'pending' AND attempts < ? AND next_attempt_at <= ?"
+        "  ORDER BY published_at ASC LIMIT 1"
+        ") AND status = 'pending' RETURNING *",
+        (MAX_ATTEMPTS, now),
     ).fetchone()
+    conn.commit()
+    return row
+
+
+def set_next_attempt(conn: sqlite3.Connection, video_id: int, ts: int) -> None:
+    conn.execute("UPDATE videos SET next_attempt_at = ? WHERE id = ?", (ts, video_id))
+    conn.commit()
 
 
 def bump_attempts(conn: sqlite3.Connection, video_id: int) -> int:
@@ -179,7 +192,7 @@ def bump_attempts(conn: sqlite3.Connection, video_id: int) -> int:
 
 
 def reset_attempts(conn: sqlite3.Connection, video_id: int) -> None:
-    conn.execute("UPDATE videos SET attempts = 0 WHERE id = ?", (video_id,))
+    conn.execute("UPDATE videos SET attempts = 0, next_attempt_at = 0 WHERE id = ?", (video_id,))
     conn.commit()
 
 

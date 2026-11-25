@@ -77,9 +77,9 @@ def test_resolve_channel_falls_back_to_id_field(ydl):
 
 
 def test_resolve_channel_without_channel_id_raises(ydl):
-    ydl.info = {"id": "PLabc", "title": "A playlist"}
+    ydl.info = {"id": "abc", "title": "A video with no channel info"}
     with pytest.raises(youtube.YouTubeError, match="Couldn't find a channel"):
-        youtube.resolve_channel("https://www.youtube.com/playlist?list=PLabc", None)
+        youtube.resolve_channel("https://www.youtube.com/watch?v=abc", None)
 
 
 def test_resolve_channel_error_becomes_youtube_error(ydl):
