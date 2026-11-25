@@ -1,10 +1,13 @@
 // Browser check for the persistent player. Needs a server seeded with
-// `python scripts/seed_demo.py <dir> --clips` (empty queue, ready a b c, downloading d).
+// `python scripts/seed_demo.py <dir> --clips` (empty queue, ready a b c, downloading d,
+// failed e, pending f). DATA_DIR must point at the same dir: one check flips d to "ready"
+// in the SQLite DB mid-test, the way the downloader would.
 //
-//   NODE_PATH=$(npm root -g) node scripts/e2e_player.mjs http://127.0.0.1:8093 [shot-dir]
+//   DATA_DIR=<dir> NODE_PATH=$(npm root -g) node scripts/e2e_player.mjs http://127.0.0.1:8093 [shot-dir]
 //
 // Exits non-zero if any check fails.
 import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,6 +25,8 @@ const T = {
   b: "Building a tiny e-ink weather station",
   c: "Why your USB-C cable is lying to you",
   d: "Three quiet days on the Norwegian coast",
+  e: "Restoring a 1970s mechanical keyboard",
+  f: "A week of cooking with only a wok",
 };
 
 let failures = 0;
@@ -245,6 +250,339 @@ await step("9. /watch deep link", async () => {
   ok("9. in-app /watch opens the video", true);
   await p.close();
 });
+
+// ---------- final fix wave: history, background playback, stale tabs, sticky current, errors ----------
+await ctx.close();
+
+const DATA_DIR = process.env.DATA_DIR;
+ok("10+. DATA_DIR is set (needed to flip d to ready)", !!DATA_DIR);
+function sql(stmt, ...params) {
+  execFileSync("python3", [
+    "-c",
+    "import sqlite3,sys; c=sqlite3.connect(sys.argv[1], timeout=10); c.execute(sys.argv[2], sys.argv[3:]); c.commit()",
+    join(DATA_DIR, "feed.db"), stmt, ...params.map(String),
+  ]);
+}
+async function api(method, path, body) {
+  const r = await fetch(base + path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return r.json();
+}
+async function setQueue(list) {
+  for (const it of await api("GET", "/api/queue")) await api("DELETE", `/api/queue/${it.id}`);
+  if (list.length) await api("POST", "/api/queue", { video_ids: list });
+}
+const serverQueue = async () => (await api("GET", "/api/queue")).map((i) => i.id);
+for (const k of ["a", "b", "c"]) await api("DELETE", `/api/videos/${ids[k]}/watched`);
+for (const k of ["a", "b", "c"]) await api("POST", `/api/videos/${ids[k]}/progress`, { position: 0, duration: 6 });
+
+const bctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+await bctx.addInitScript(() => {
+  // Capture Media Session handlers/positions and media "play" events (capture phase sees them).
+  window.__ms = {};
+  window.__pos = [];
+  window.__plays = 0;
+  const ms = navigator.mediaSession;
+  if (ms) {
+    const sah = ms.setActionHandler.bind(ms);
+    ms.setActionHandler = (a, h) => { window.__ms[a] = h; return sah(a, h); };
+    const sps = ms.setPositionState ? ms.setPositionState.bind(ms) : null;
+    ms.setPositionState = (st) => { window.__pos.push(st); return sps && sps(st); };
+  }
+  document.addEventListener("play", () => { window.__plays++; }, true);
+});
+const bp = await bctx.newPage();
+watch(bp, "bg");
+const posts = []; // progress POSTs: {id, position}
+bp.on("request", (r) => {
+  const m = new URL(r.url()).pathname.match(/^\/api\/videos\/(\d+)\/progress$/);
+  if (m && r.method() === "POST") posts.push({ id: Number(m[1]), position: JSON.parse(r.postData() || "{}").position, at: Date.now() });
+});
+const BV = () => bp.evaluate(() => {
+  const v = document.getElementById("video");
+  return { paused: v.paused, t: v.currentTime, src: v.currentSrc, id: window.Player.currentId };
+});
+const bPlaying = (id, timeout = 5000) =>
+  bp.waitForFunction((id) => {
+    const v = document.getElementById("video");
+    return window.Player && window.Player.currentId === id && !v.paused && v.currentTime > 0;
+  }, id, { timeout });
+const bAdvancing = async () => {
+  const t1 = (await BV()).t;
+  await bp.waitForTimeout(600);
+  const t2 = (await BV()).t;
+  return { t1, t2, ok: t2 > t1 };
+};
+const bRewind = () => bp.evaluate(() => { document.getElementById("video").currentTime = 0.1; });
+const setVisibility = (state) => bp.evaluate((state) => {
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+  Object.defineProperty(document, "hidden", { configurable: true, get: () => state === "hidden" });
+  document.dispatchEvent(new Event("visibilitychange"));
+}, state);
+// Each step below starts from a fresh load with a known queue, so one failure doesn't cascade.
+async function fresh(list, { play = false } = {}) {
+  for (const id of list) await api("DELETE", `/api/videos/${id}/watched`);
+  await setQueue(list);
+  for (const id of list) await api("POST", `/api/videos/${id}/progress`, { position: 0, duration: 6 });
+  await bp.goto(base + "/");
+  await bp.waitForSelector(".hello");
+  await bp.waitForFunction(() => window.Player && document.readyState === "complete");
+  await bp.evaluate(() => window.Player.refresh());
+  if (play) {
+    await bp.locator('#player .mini [data-p="toggle"]').click();
+    await bp.waitForFunction(() => !document.getElementById("video").paused, null, { timeout: 5000 });
+  }
+}
+const sheetOpen = () => bp.evaluate(() => document.querySelector("#player .sheet").classList.contains("open"));
+const barStatus = () => bp.locator("#player .mini .s").textContent();
+const fakeError = (code) => bp.evaluate((code) => {
+  const v = document.getElementById("video");
+  Object.defineProperty(v, "error", { configurable: true, get: () => ({ code }) });
+  v.dispatchEvent(new Event("error"));
+  delete v.error;
+}, code);
+
+await setQueue([ids.a, ids.c, ids.b]);
+// Start on /channels so a Back that (wrongly) navigates stays inside the app.
+await bp.goto(base + "/channels");
+await bp.evaluate(() => window.Nav.go("/"));
+await bp.waitForSelector(".hello");
+await bp.waitForFunction((id) => window.Player?.currentId === id, ids.a, { timeout: 5000 });
+
+// 10. No gesture-unlock hack: a first tap elsewhere must not start (and stop) the loaded video.
+await step("10. first tap does not touch the video", async () => {
+  await bp.waitForTimeout(300);
+  await bp.locator(".hello").click();
+  await bp.waitForTimeout(300);
+  const r = await bp.evaluate(() => ({ plays: window.__plays, paused: document.getElementById("video").paused }));
+  ok("10. no play() from a stray first tap", r.plays === 0 && r.paused, JSON.stringify(r));
+});
+
+// 11. Android Back with the sheet open collapses it instead of navigating.
+await step("11. back closes the sheet", async () => {
+  await bp.locator("#player .mini .txt").click();
+  await bp.locator("#player .sheet").waitFor({ state: "visible", timeout: 3000 });
+  await bp.locator('#player .sh-ctl [data-p="toggle"]').click();
+  await bPlaying(ids.a);
+  ok("11. sheet open: no pull-to-refresh", await bp.evaluate(() =>
+    getComputedStyle(document.documentElement).overscrollBehaviorY === "none"));
+  await bp.evaluate(() => { window.__main = document.getElementById("main"); });
+  const url = bp.url();
+  await bp.evaluate(() => history.back());
+  await bp.waitForFunction(() => !document.querySelector("#player .sheet").classList.contains("open"), null, { timeout: 3000 });
+  await bp.waitForTimeout(500);
+  const r = await bp.evaluate(() => ({ same: document.getElementById("main") === window.__main, sheet: !!history.state?.sheet }));
+  const adv = await bAdvancing();
+  ok("11. back: sheet collapsed, page not reloaded, URL same, still playing",
+    r.same && !r.sheet && bp.url() === url && adv.ok, JSON.stringify({ ...r, url: bp.url(), adv }));
+
+  // ⌄ pops the sheet's history entry: a following navigation doesn't leave a stale entry behind.
+  await bp.locator("#player .mini .txt").click();
+  await bp.locator("#player .sheet").waitFor({ state: "visible", timeout: 3000 });
+  ok("11. expand pushes a sheet entry", await bp.evaluate(() => history.state?.sheet === true));
+  const len0 = (await bp.evaluate(() => history.length)) - 1; // length without the sheet entry
+  await bp.locator('#player .sh-head [data-p="collapse"]').click();
+  await bp.waitForFunction(() => !history.state?.sheet, null, { timeout: 3000 });
+  await bp.waitForTimeout(200);
+  ok("11. ⌄ collapse: page not reloaded", await bp.evaluate(() => document.getElementById("main") === window.__main));
+
+  // Escape while fullscreen belongs to the fullscreen video, not the sheet.
+  await bp.locator("#player .mini .txt").click();
+  await bp.locator("#player .sheet").waitFor({ state: "visible", timeout: 3000 });
+  await bp.evaluate(() => Object.defineProperty(document, "fullscreenElement", {
+    configurable: true, get: () => document.getElementById("video"),
+  }));
+  await bp.keyboard.press("Escape");
+  await bp.waitForTimeout(300);
+  ok("12. Escape in fullscreen keeps the sheet open", await sheetOpen());
+  await bp.evaluate(() => { delete document.fullscreenElement; });
+
+  // Following a link while the sheet is open replaces the sheet entry.
+  await bp.evaluate(() => window.Nav.go("/channels"));
+  await bp.waitForSelector(".chead h1");
+  ok("11. link from open sheet: collapsed, no extra entry",
+    !(await sheetOpen()) && (await bp.evaluate(() => history.length)) === len0 + 1,
+    `len ${await bp.evaluate(() => history.length)} vs ${len0 + 1}`);
+  await bp.evaluate(() => history.back());
+  await bp.waitForSelector(".hello");
+  ok("11. back from there returns to the feed, sheet closed", !(await sheetOpen()) && new URL(bp.url()).pathname === "/");
+  ok("11. still playing a", (await bAdvancing()).ok && (await BV()).id === ids.a);
+});
+
+// 13. Background: hidden page keeps playing, auto-advances, Media Session is complete.
+await step("13. background playback", async () => {
+  await fresh([ids.a, ids.c, ids.b], { play: true });
+  await bPlaying(ids.a);
+  await bp.waitForTimeout(700);
+  const before = posts.length;
+  await setVisibility("hidden");
+  await bp.waitForTimeout(400);
+  ok("13. hidden: reported progress", posts.slice(before).some((p) => p.id === ids.a), JSON.stringify(posts.slice(before)));
+  const adv = await bAdvancing();
+  ok("13. hidden: still playing", adv.ok, JSON.stringify(adv));
+  await bp.evaluate(() => {
+    const v = document.getElementById("video");
+    v.addEventListener("ended", () => {
+      window.__afterEnded = { id: window.Player.currentId, paused: v.paused, ps: navigator.mediaSession.playbackState };
+    }, { once: true });
+    v.currentTime = v.duration - 0.3;
+  });
+  await bPlaying(ids.c, 8000);
+  const ae = await bp.evaluate(() => window.__afterEnded);
+  ok("13. ended switches to the next item synchronously (no gap)",
+    ae && ae.id === ids.c && !ae.paused && ae.ps === "playing", JSON.stringify(ae));
+  ok("13. hidden: c plays after a ends", (await bp.evaluate(() => document.hidden)) === true);
+  await bp.waitForFunction((want) => fetch("/api/queue").then((r) => r.json())
+    .then((q) => JSON.stringify(q.map((i) => i.id)) === want), JSON.stringify([ids.c, ids.b]), { timeout: 5000 });
+  ok("13. server synced: queue [c, b]", true);
+  const md = await bp.evaluate(() => {
+    const m = navigator.mediaSession.metadata;
+    return m && { title: m.title, artist: m.artist, art: m.artwork.map((a) => ({ type: a.type, sizes: a.sizes, src: a.src })) };
+  });
+  ok("13. media metadata is c", md && md.title === T.c && md.artist === "Circuit Notes", JSON.stringify(md));
+  ok("13. artwork: jpeg, no hard-coded size", md && md.art.length === 1 && md.art[0].type === "image/jpeg" &&
+    (!md.art[0].sizes || md.art[0].sizes === "any") && md.art[0].src.startsWith(origin), JSON.stringify(md?.art));
+  const hs = await bp.evaluate(() => Object.keys(window.__ms).filter((k) => typeof window.__ms[k] === "function").sort());
+  const want = ["nexttrack", "pause", "play", "previoustrack", "seekbackward", "seekforward", "seekto"];
+  ok("13. media session handlers", want.every((h) => hs.includes(h)), hs.join(","));
+  const pos = await bp.evaluate(() => window.__pos.slice(-1)[0]);
+  ok("13. setPositionState with finite duration", pos && Number.isFinite(pos.duration) && pos.duration > 0 &&
+    pos.position >= 0 && pos.position <= pos.duration, JSON.stringify(pos));
+
+  await bp.evaluate(() => { document.getElementById("video").currentTime = 1; });
+  await bp.evaluate(() => window.__ms.seekforward({ action: "seekforward", seekOffset: 2 }));
+  let t = (await BV()).t;
+  ok("13. seekforward honours seekOffset", t >= 2.9 && t < 3.6, String(t));
+  await bp.evaluate(() => window.__ms.seekbackward({ action: "seekbackward" }));
+  t = (await BV()).t;
+  ok("13. seekbackward defaults to 10 s (clamped at 0)", t < 0.6, String(t));
+  await bp.evaluate(() => window.__ms.seekto({ action: "seekto", seekTime: 4 }));
+  t = (await BV()).t;
+  ok("13. seekto", Math.abs(t - 4) < 0.6, String(t));
+  await bp.evaluate(() => window.__ms.previoustrack({ action: "previoustrack" }));
+  t = (await BV()).t;
+  ok("13. previoustrack restarts", t < 0.6, String(t));
+  await bp.evaluate(() => window.__ms.nexttrack({ action: "nexttrack" }));
+  await bPlaying(ids.b, 5000);
+  ok("13. nexttrack skips to b, playing", true);
+  ok("13. server queue [b]", JSON.stringify(await serverQueue()) === JSON.stringify([ids.b]));
+  await bp.evaluate(() => window.__ms.pause({ action: "pause" }));
+  ok("13. pause handler pauses", (await BV()).paused);
+  await setVisibility("visible");
+});
+
+// 14. Stale tab: becoming visible re-syncs position; no progress posted for a dequeued item.
+await step("14. stale tab", async () => {
+  await fresh([ids.c, ids.b]);
+  await bp.waitForFunction((id) => window.Player.currentId === id && document.getElementById("video").readyState >= 1, ids.c, { timeout: 5000 });
+  await bp.waitForTimeout(300);
+  await setVisibility("hidden");
+  await api("POST", `/api/videos/${ids.c}/progress`, { position: 3.5, duration: 6 }); // "the phone" moved on
+  await setVisibility("visible");
+  await bp.waitForFunction(() => Math.abs(document.getElementById("video").currentTime - 3.5) < 0.5, null, { timeout: 3000 });
+  ok("14. visible: paused video seeks to the server position", true);
+
+  await api("DELETE", `/api/queue/${ids.c}`); // finished/removed elsewhere
+  await api("POST", `/api/videos/${ids.c}/progress`, { position: 2, duration: 6 });
+  const before = posts.length;
+  await setVisibility("hidden");
+  await setVisibility("visible");
+  await bp.waitForFunction((id) => window.Player.currentId === id, ids.b, { timeout: 3000 });
+  await bp.waitForTimeout(300);
+  const stale = posts.slice(before).filter((p) => p.id === ids.c);
+  ok("14. no progress posted for the dequeued item", stale.length === 0, JSON.stringify(stale));
+});
+
+// 15. Sticky current: a downloading item ahead of the playing one finishing must not yank playback.
+await step("15. sticky current", async () => {
+  await fresh([ids.d, ids.b]);
+  await bp.waitForFunction((id) => window.Player.currentId === id, ids.b, { timeout: 5000 });
+  await bp.locator('#player .mini [data-p="toggle"]').click();
+  await bPlaying(ids.b);
+  await bp.waitForFunction((want) => fetch("/api/queue").then((r) => r.json())
+    .then((q) => JSON.stringify(q.map((i) => i.id)) === want), JSON.stringify([ids.b, ids.d]), { timeout: 3000 })
+    .catch(() => {});
+  ok("15. loaded item pinned to the head: [b, d]", JSON.stringify(await serverQueue()) === JSON.stringify([ids.b, ids.d]),
+    JSON.stringify(await serverQueue()));
+  sql("UPDATE videos SET status = 'ready', file_path = ? WHERE id = ?", join(DATA_DIR, "videos", "demoa000000.mp4"), ids.d);
+  await bRewind();
+  await bp.evaluate(() => window.Nav.go("/channels"));
+  await bp.waitForSelector(".chead h1");
+  await bp.waitForTimeout(800);
+  const v = await BV();
+  ok("15. b keeps playing after d became ready", v.id === ids.b && !v.paused, JSON.stringify(v));
+  await bp.evaluate(() => window.Nav.go("/"));
+  await bp.waitForSelector(".hello");
+});
+
+// 16. Bar labels by status; poll only while something is downloading.
+await step("16. status labels", async () => {
+  await fresh([]);
+  await setQueue([ids.e]);
+  await bp.evaluate(() => window.Player.refresh());
+  await bp.waitForFunction(() => window.Player.currentId === null, null, { timeout: 3000 });
+  let s = await barStatus();
+  ok("16. failed item: 'Download failed', no polling", s === "Download failed" && !(await bp.evaluate(() => window.Player.polling)), s);
+  await setQueue([ids.f]);
+  await bp.evaluate(() => window.Player.refresh());
+  s = await barStatus();
+  ok("16. pending item: 'Downloading', polling", s === "Downloading" && (await bp.evaluate(() => window.Player.polling)), s);
+  await setQueue([ids.b, ids.e, ids.f]);
+  await bp.evaluate(() => window.Player.refresh());
+  const up = await bp.locator("#player .upnext ol").textContent();
+  ok("16. up next labels", up.includes("Download failed") && up.includes("Downloading"), up);
+  ok("16. polling while f is still downloading", await bp.evaluate(() => window.Player.polling));
+  await setQueue([ids.b, ids.e]);
+  await bp.evaluate(() => window.Player.refresh());
+  ok("16. nothing downloading: no polling", !(await bp.evaluate(() => window.Player.polling)));
+});
+
+// 17. Playback errors: network blip retries in place; user pause is respected; others leave the queue.
+await step("17. playback errors", async () => {
+  await fresh([ids.c]);
+  await bp.evaluate((id) => window.Player.playNow(id), ids.b);
+  await bPlaying(ids.b);
+  ok("17. queue [b, c]", JSON.stringify(await serverQueue()) === JSON.stringify([ids.b, ids.c]));
+  await bp.evaluate(() => { document.getElementById("video").currentTime = 2; });
+  await bp.waitForTimeout(300);
+  await fakeError(2);
+  await bp.waitForTimeout(1500);
+  let v = await BV();
+  ok("17. network error: same item reloaded, resumed near saved time", v.id === ids.b && !v.paused && v.t >= 1.9, JSON.stringify(v));
+  ok("17. network error: still queued", JSON.stringify(await serverQueue()) === JSON.stringify([ids.b, ids.c]));
+});
+
+await step("17b. decode error after a user pause", async () => {
+  await fresh([ids.c]);
+  await bp.evaluate((id) => window.Player.playNow(id), ids.b); // loads with autoplay
+  await bPlaying(ids.b);
+  await bp.locator('#player .mini [data-p="toggle"]').click(); // user pauses
+  await bp.waitForTimeout(200);
+  await fakeError(4);
+  await bp.waitForFunction((id) => window.Player.currentId === id, ids.c, { timeout: 3000 });
+  ok("17. decode error: local queue drops b at once", !(await bp.evaluate((id) => window.Player.queue.includes(id), ids.b)));
+  await bp.waitForTimeout(500);
+  const v = await BV();
+  ok("17. user had paused: next item stays paused", v.paused, JSON.stringify(v));
+  ok("17. decode error: server queue [c]", JSON.stringify(await serverQueue()) === JSON.stringify([ids.c]),
+    JSON.stringify(await serverQueue()));
+});
+
+// 18. Navigation: a slow older response must not replace a newer page.
+await step("18. nav drops stale responses", async () => {
+  await fresh([]);
+  await bp.route("**/channels", async (r) => { await new Promise((res) => setTimeout(res, 1500)); await r.continue(); });
+  await bp.evaluate(() => { window.Nav.go("/channels"); setTimeout(() => window.Nav.go("/"), 50); });
+  await bp.waitForTimeout(2500);
+  const r = await bp.evaluate(() => ({ path: location.pathname, feed: !!document.querySelector(".hello"), ch: !!document.querySelector(".chead") }));
+  ok("18. newest navigation wins", r.path === "/" && r.feed && !r.ch, JSON.stringify(r));
+  await bp.unroute("**/channels");
+});
+
+await bctx.close();
 
 await browser.close();
 console.log(`\nscreenshots in ${shots}`);
