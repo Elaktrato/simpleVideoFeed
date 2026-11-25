@@ -39,6 +39,8 @@
     <div class="btns">
       {% if p.status == 'ready' %}
       <button type="button" class="pill go" data-action="play" data-id="{{ p.id }}"><svg class="i fill"><use href="#i-play"/></svg>Play</button>
+      {% endif %}
+      {% if p.status in ('ready', 'pending', 'downloading') %}
       <button type="button" class="pill" data-action="next" data-id="{{ p.id }}"><svg class="i"><use href="#i-playnext"/></svg>Next</button>
       {% endif %}
       {% if p.in_queue %}

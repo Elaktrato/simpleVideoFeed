@@ -27,6 +27,8 @@
   <div class="menu" hidden>
     {% if v.status == 'ready' %}
     <button type="button" data-action="play" data-id="{{ v.id }}"><svg class="i"><use href="#i-play"/></svg>Play</button>
+    {% endif %}
+    {% if v.status in ('ready', 'pending', 'downloading') %}
     <button type="button" data-action="next" data-id="{{ v.id }}"><svg class="i"><use href="#i-playnext"/></svg>Play next</button>
     {% endif %}
     {% if not v.in_queue %}<button type="button" data-action="queue" data-id="{{ v.id }}"><svg class="i"><use href="#i-plus"/></svg>Add to queue</button>{% endif %}

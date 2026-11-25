@@ -132,3 +132,16 @@ def test_save_progress_watched_keeps_in_queue(conn, now):
     assert repo.save_progress(conn, a, 95, 100, now) is True
     assert repo.get_video(conn, a)["watched_at"] is not None
     assert qids(conn) == [a]
+
+
+def test_play_now_on_current_behind_downloading_pins_it_to_head(conn, now):
+    # The player pins the item it loaded to the head (POST /api/queue/play keep_current) so a
+    # downloading item ahead of it that finishes later can't become "current" and yank playback.
+    c = make_channel(conn, now)
+    d = make_video(conn, c, "d", now - H, status="downloading")
+    b = _ready(conn, c, "b", now)
+    repo.queue_add(conn, [d, b])
+    repo.queue_play_now(conn, b, keep_current=True)
+    assert qids(conn) == [b, d]
+    repo.set_status(conn, d, "ready", file_path="/x/d.mp4")
+    assert repo.queue_current(conn)["id"] == b

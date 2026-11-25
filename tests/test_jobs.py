@@ -182,3 +182,20 @@ def test_recover_resets_downloading_and_removes_part_files(conn, settings, now):
     jobs.recover(conn, settings)
     assert repo.get_video(conn, v)["status"] == "pending"
     assert not part.exists() and done.exists()
+
+
+def test_cleanup_watched_grace_also_dequeues(conn, settings, now):
+    # 90% marks the current item watched but keeps it queued; once its file is cleaned up it
+    # can never play, so it must leave the queue too (or the bar shows it forever).
+    c = make_channel(conn, now)
+    v = make_video(conn, c, "q", now - 2 * D)
+    other = make_video(conn, c, "o", now - 2 * D)
+    f = settings.videos_dir / "q.mp4"
+    f.write_bytes(b"x")
+    repo.set_status(conn, v, "ready", file_path=str(f))
+    repo.queue_add(conn, [v, other])
+    assert repo.save_progress(conn, v, 95, 100, now - 25 * H)
+    assert [r["id"] for r in repo.queue_list(conn)] == [v, other]
+    assert jobs.cleanup(conn, settings, now) == 1
+    assert repo.get_video(conn, v)["file_path"] is None
+    assert [r["id"] for r in repo.queue_list(conn)] == [other]

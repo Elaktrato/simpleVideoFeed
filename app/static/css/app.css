@@ -245,6 +245,8 @@ input[type=text]:focus-visible, select:focus-visible { border-color: var(--blue)
 
 /* ---------- player: expanded sheet ---------- */
 html.sheet-open, html.sheet-open body { overflow: hidden; }
+/* No pull-to-refresh while the player is open: a reload would stop playback. */
+html.sheet-open { overscroll-behavior-y: none; }
 #player .sheet {
   position: fixed; inset: 0; z-index: 30; background: var(--bg-deep);
   transform: translateY(100%); visibility: hidden;

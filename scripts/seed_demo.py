@@ -4,7 +4,8 @@
     python scripts/seed_demo.py /tmp/data --clips   # real 6 s H.264 clips + thumbnails (needs ffmpeg)
 
 Matches the player e2e scenario (scripts/e2e_player.mjs): three ready videos a, b, c,
-one downloading video d, and an empty queue. b is the newest, so it is the feed's poster.
+one downloading video d, one failed video e, one pending video f, and an empty queue.
+b is the newest, so it is the feed's poster.
 """
 import subprocess
 import sys
@@ -43,6 +44,8 @@ rows = [
     ("b", 1, "Building a tiny e-ink weather station", 1, 6, "ready", 120),
     ("c", 1, "Why your USB-C cable is lying to you", 5, 6, "ready", 240),
     ("d", 2, "Three quiet days on the Norwegian coast", 7, 2711, "downloading", 60),
+    ("e", 1, "Restoring a 1970s mechanical keyboard", 9, 1290, "failed", 300),
+    ("f", 0, "A week of cooking with only a wok", 11, 845, "pending", 30),
 ]
 
 
@@ -55,6 +58,8 @@ for key, c, title, hours, dur, status, hue in rows:
     repo.upsert_video(conn, chans[c], FeedEntry(yid, title, now - hours * 3600, "", ""), status, now)
     v = repo.get_video_by_yid(conn, yid)["id"]
     repo.set_video_meta(conn, v, dur, status)
+    if status == "failed":
+        repo.set_status(conn, v, "failed", error="HTTP Error 403: Forbidden")
     if status != "ready":
         continue
     f = s.videos_dir / f"{yid}.mp4"
