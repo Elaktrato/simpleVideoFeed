@@ -3,6 +3,8 @@
   const main = () => document.getElementById("main");
   const scrolls = new Map(); // history key -> scrollY
   let key = 0;
+  let seq = 0;        // bumps on every load: only the newest response is applied
+  let navPending = 0; // seq of an in-flight push/replace/pop navigation, 0 when none
 
   function stamp() {
     key = (history.state && history.state.key) || Date.now() + Math.random();
@@ -18,29 +20,41 @@
 
   // mode: "push" (new entry), "replace" (rewrite current entry), "pop" (history traversal), "reload".
   async function load(url, { method = "GET", body = null, mode = "push", restore = 0, form = null } = {}) {
+    // A silent refresh never overrides a real navigation that is on its way.
+    if (mode === "reload" && navPending) return;
+    const my = ++seq;
+    if (mode !== "reload") navPending = my;
     if (mode === "push") scrolls.set(key, window.scrollY);
     try {
       const res = await fetch(url, { method, body, redirect: "follow", headers: { "X-Requested-With": "nav" } });
       const type = res.headers.get("content-type") || "";
       if (!res.ok || !type.includes("text/html")) throw new Error("not a swappable page");
-      const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+      const text = await res.text();
+      if (my !== seq) return; // superseded by a newer load
+      const doc = new DOMParser().parseFromString(text, "text/html");
       const next = doc.getElementById("main");
       if (!next) throw new Error("no main");
       main().replaceWith(next);
       document.title = doc.title;
       if (mode === "push" || mode === "replace") {
         const state = { key: Date.now() + Math.random() };
-        history[mode === "replace" ? "replaceState" : "pushState"](state, "", res.url);
+        // The open player sheet owns the top entry (same URL): a link replaces it, so Back
+        // from the new page returns to the page itself rather than to a closed sheet.
+        const replace = mode === "replace" || !!history.state?.sheet;
+        history[replace ? "replaceState" : "pushState"](state, "", res.url);
         key = state.key;
       } else if (mode === "reload") {
-        history.replaceState({ key }, "", res.url);
+        history.replaceState({ ...(history.state || {}), key }, "", res.url);
       }
       window.scrollTo(0, restore);
       document.dispatchEvent(new CustomEvent("nav:loaded"));
     } catch (e) {
+      if (my !== seq) return;
       if (form) form.submit(); // a failed POST must not be retried as a GET
       else if (mode === "pop") location.reload();
       else location.assign(url);
+    } finally {
+      if (navPending === my) navPending = 0;
     }
   }
 
@@ -68,6 +82,9 @@
   });
 
   window.addEventListener("popstate", (e) => {
+    // The player handles its own sheet entries (Back closes the expanded player).
+    const ask = new CustomEvent("nav:popstate", { cancelable: true, detail: { state: e.state } });
+    if (!document.dispatchEvent(ask)) return;
     scrolls.set(key, window.scrollY); // outgoing entry, under its own key
     const k = e.state && e.state.key;
     if (k) key = k;
