@@ -12,7 +12,9 @@ from typing import Callable, Iterator
 from urllib.parse import quote
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Form, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from app import jobs, repo, youtube
 from app.config import Settings, load_settings
@@ -20,6 +22,31 @@ from app.db import connect, init_db
 
 log = logging.getLogger(__name__)
 _YID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
+HERE = Path(__file__).parent
+
+
+def fmt_duration(seconds: int | None) -> str:
+    if not seconds:
+        return ""
+    h, rem = divmod(int(seconds), 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def fmt_age(ts: int | None, now: int) -> str:
+    if not ts:
+        return ""
+    d = max(0, now - int(ts))
+    if d < 3600:
+        return f"{max(1, d // 60)}m ago"
+    if d < 86400:
+        return f"{d // 3600}h ago"
+    return f"{d // 86400}d ago"
+
+
+templates = Jinja2Templates(directory=str(HERE / "templates"))
+templates.env.filters["duration"] = fmt_duration
+templates.env.filters["age"] = fmt_age
 
 
 def _err(status: int, msg: str) -> JSONResponse:
@@ -272,6 +299,47 @@ def create_app(
     def group_delete(group_id: int, conn=Depends(db)):
         repo.delete_group(conn, group_id)
         return _back("/channels")
+
+    # ---------- pages ----------
+
+    app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
+
+    def render(request: Request, name: str, conn, **ctx) -> HTMLResponse:
+        ctx.setdefault("queue_count", len(repo.queue_list(conn)))
+        return templates.TemplateResponse(request, name, {"now": now(), **ctx})
+
+    @app.get("/", response_class=HTMLResponse)
+    def feed_page(request: Request, tab: str = "today", group: str = "", conn=Depends(db)):
+        tab = tab if tab in repo.WINDOWS else "today"
+        group_id = _group_or_none(group)
+        t = now()
+        return render(
+            request, "feed.html", conn, page="feed", tab=tab, group_id=group_id,
+            groups=repo.list_groups(conn),
+            videos=repo.feed(conn, tab, group_id, t),
+            counts=repo.feed_counts(conn, group_id, t),
+        )
+
+    @app.get("/watch/{video_id}", response_class=HTMLResponse)
+    def watch_page(request: Request, video_id: int, conn=Depends(db)):
+        v = repo.get_video(conn, video_id)
+        playable = bool(
+            v is not None and v["status"] == "ready" and v["file_path"] and Path(v["file_path"]).is_file()
+        )
+        in_queue = any(r["id"] == video_id for r in repo.queue_list(conn))
+        return render(request, "watch.html", conn, page="watch", video=v, playable=playable, in_queue=in_queue)
+
+    @app.get("/queue", response_class=HTMLResponse)
+    def queue_page(request: Request, conn=Depends(db)):
+        items = repo.queue_list(conn)
+        return render(request, "queue.html", conn, page="queue", items=items, queue_count=len(items))
+
+    @app.get("/channels", response_class=HTMLResponse)
+    def channels_page(request: Request, error: str = "", conn=Depends(db)):
+        return render(
+            request, "channels.html", conn, page="channels", error=error,
+            groups=repo.list_groups(conn), channels=repo.list_channels(conn),
+        )
 
     return app
 
