@@ -6,7 +6,8 @@ A small, self-hosted YouTube feed for people who want to watch their channels **
 - The **Today** and **This Week** tabs show only those channels' new uploads. There are no recommendations, comments or Shorts rabbit holes.
 - New videos are downloaded to your server and play from there, so you never touch youtube.com.
 - Watched videos disappear. When you're through, the feed says **"You're all caught up."**
-- **+ Queue** (or **Add all to queue**) builds an impromptu playlist that plays back to back and remembers its place on any device.
+- Videos keep playing while you browse. A player bar at the bottom shows progress; tap it for the full-screen player with ⏮ ⏯ ⏭, **✓ Done** and an **Up next** list you can reorder or remove.
+- **Play next** plays a video right after the current one. **+ Queue** adds it to the end. Lock-screen and headphone controls work too.
 - Videos are deleted automatically: watched ones after a day, everything 14 days after upload.
 
 ## Run it with Portainer
