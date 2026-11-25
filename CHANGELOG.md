@@ -4,6 +4,8 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-25
+
 ### Changed
 - Python 3.15 base image (was 3.12).
 - GitHub Actions updated to their current major versions (no more Node.js 20 deprecation warnings).
