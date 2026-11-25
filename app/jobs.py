@@ -138,6 +138,8 @@ def cleanup(conn: sqlite3.Connection, settings: Settings, now: int) -> int:
     ).fetchall():
         deleted += _unlink(v["file_path"])
         repo.clear_file(conn, v["id"])
+        # Without its file it can never play again: drop it from the queue too.
+        conn.execute("DELETE FROM queue WHERE video_id = ?", (v["id"],))
 
     retention_cutoff = now - settings.retention_days * 86400
     for v in conn.execute(

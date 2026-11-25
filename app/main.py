@@ -7,6 +7,7 @@ import re
 import sqlite3
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterator
 from urllib.parse import quote
@@ -157,10 +158,16 @@ def create_app(
         return {"ok": True, "version": __version__}
 
     @app.delete("/api/videos/{video_id}/watched")
-    def unwatched(video_id: int, conn=Depends(db)):
+    async def unwatched(video_id: int, request: Request, conn=Depends(db)):
         if repo.get_video(conn, video_id) is None:
             return _err(404, "No such video")
+        try:
+            queue_index = int((await request.json())["queue_index"])
+        except (ValueError, KeyError, TypeError):
+            queue_index = None
         repo.unmark_watched(conn, video_id)
+        if queue_index is not None:
+            repo.queue_insert_at(conn, video_id, queue_index)
         return {"ok": True, "version": __version__}
 
     @app.post("/api/videos/{video_id}/progress")
@@ -194,6 +201,9 @@ def create_app(
                 "channel": r["channel_title"],
                 "status": r["status"],
                 "position": r["position_s"],
+                "thumb": f"/thumbs/{r['youtube_video_id']}.jpg" if r["thumbnail_path"] else None,
+                "duration": r["duration_s"],
+                "ready": r["status"] == "ready" and r["file_path"] is not None,
                 "src": f"/media/{r['youtube_video_id']}.mp4" if r["file_path"] else None,
             }
             for r in repo.queue_list(conn)
@@ -210,6 +220,29 @@ def create_app(
         except (ValueError, KeyError, TypeError):
             return _err(400, "Expected {video_ids: [int]}")
         repo.queue_add(conn, ids)
+        return _queue_json(conn)
+
+    @app.post("/api/queue/play")
+    async def queue_play(request: Request, conn=Depends(db)):
+        try:
+            body = await request.json()
+            video_id, keep = int(body["video_id"]), bool(body.get("keep_current", False))
+        except (ValueError, KeyError, TypeError):
+            return _err(400, "Expected {video_id, keep_current}")
+        if repo.get_video(conn, video_id) is None:
+            return _err(404, "No such video")
+        repo.queue_play_now(conn, video_id, keep)
+        return _queue_json(conn)
+
+    @app.post("/api/queue/next")
+    async def queue_next(request: Request, conn=Depends(db)):
+        try:
+            video_id = int((await request.json())["video_id"])
+        except (ValueError, KeyError, TypeError):
+            return _err(400, "Expected {video_id}")
+        if repo.get_video(conn, video_id) is None:
+            return _err(404, "No such video")
+        repo.queue_play_next(conn, video_id)
         return _queue_json(conn)
 
     @app.post("/api/queue/{video_id}/move")
@@ -305,20 +338,23 @@ def create_app(
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
     def render(request: Request, name: str, conn, **ctx) -> HTMLResponse:
-        ctx.setdefault("queue_count", len(repo.queue_list(conn)))
         return templates.TemplateResponse(request, name, {"now": now(), "version": __version__, **ctx})
 
-    @app.get("/", response_class=HTMLResponse)
-    def feed_page(request: Request, tab: str = "today", group: str = "", conn=Depends(db)):
+    def feed_ctx(conn, tab: str, group: str, **extra) -> dict:
         tab = tab if tab in repo.WINDOWS else "today"
         group_id = _group_or_none(group)
         t = now()
-        return render(
-            request, "feed.html", conn, page="feed", tab=tab, group_id=group_id,
+        return dict(
+            page="feed", tab=tab, weekday=datetime.fromtimestamp(t).strftime("%A"), group_id=group_id,
             groups=repo.list_groups(conn),
             videos=repo.feed(conn, tab, group_id, t),
             counts=repo.feed_counts(conn, group_id, t),
+            **extra,
         )
+
+    @app.get("/", response_class=HTMLResponse)
+    def feed_page(request: Request, tab: str = "today", group: str = "", conn=Depends(db)):
+        return render(request, "feed.html", conn, **feed_ctx(conn, tab, group))
 
     @app.get("/watch/{video_id}", response_class=HTMLResponse)
     def watch_page(request: Request, video_id: int, conn=Depends(db)):
@@ -326,13 +362,12 @@ def create_app(
         playable = bool(
             v is not None and v["status"] == "ready" and v["file_path"] and Path(v["file_path"]).is_file()
         )
-        in_queue = any(r["id"] == video_id for r in repo.queue_list(conn))
-        return render(request, "watch.html", conn, page="watch", video=v, playable=playable, in_queue=in_queue)
-
-    @app.get("/queue", response_class=HTMLResponse)
-    def queue_page(request: Request, conn=Depends(db)):
-        items = repo.queue_list(conn)
-        return render(request, "queue.html", conn, page="queue", items=items, queue_count=len(items))
+        if playable:
+            return render(request, "feed.html", conn, **feed_ctx(conn, "today", ""), open_video=video_id)
+        return render(
+            request, "feed.html", conn,
+            **feed_ctx(conn, "today", "", error="This video is no longer available."),
+        )
 
     @app.get("/channels", response_class=HTMLResponse)
     def channels_page(request: Request, error: str = "", conn=Depends(db)):

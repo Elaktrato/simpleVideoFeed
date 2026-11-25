@@ -250,7 +250,9 @@ def save_progress(
     if duration_s and duration_s > 0 and position_s / duration_s >= WATCHED_RATIO:
         row = conn.execute("SELECT watched_at FROM videos WHERE id = ?", (video_id,)).fetchone()
         if row and row["watched_at"] is None:
-            mark_watched(conn, video_id, now)
+            # Stays queued: the player may still be on it; dequeueing is mark_watched's job.
+            conn.execute("UPDATE videos SET watched_at = ? WHERE id = ?", (now, video_id))
+            conn.commit()
             return True
     return False
 
@@ -294,6 +296,68 @@ def queue_move(conn: sqlite3.Connection, video_id: int, direction: str) -> None:
     conn.execute("UPDATE queue SET position = ? WHERE video_id = ?", (other["position"], video_id))
     conn.execute("UPDATE queue SET position = ? WHERE video_id = ?", (me["position"], other["video_id"]))
     conn.commit()
+
+
+def _queue_ids(conn: sqlite3.Connection) -> list[int]:
+    return [r["video_id"] for r in conn.execute("SELECT video_id FROM queue ORDER BY position")]
+
+
+def _queue_write(conn: sqlite3.Connection, ids: list[int]) -> None:
+    """Replace the queue with ids, renumbering positions 1..n."""
+    conn.execute("DELETE FROM queue")
+    conn.executemany(
+        "INSERT INTO queue (video_id, position) VALUES (?, ?)",
+        [(vid, i) for i, vid in enumerate(ids, 1)],
+    )
+    conn.commit()
+
+
+def _queueable(conn: sqlite3.Connection, video_id: int) -> bool:
+    row = conn.execute(
+        "SELECT watched_at FROM videos WHERE id = ? AND status NOT IN ('expired','skipped')",
+        (video_id,),
+    ).fetchone()
+    return row is not None and row["watched_at"] is None
+
+
+def queue_current(conn: sqlite3.Connection) -> sqlite3.Row | None:
+    """First queued video that is downloaded and ready to play."""
+    return conn.execute(
+        "SELECT v.*, c.title AS channel_title FROM queue q"
+        " JOIN videos v ON v.id = q.video_id JOIN channels c ON c.id = v.channel_id"
+        " WHERE v.status = 'ready' AND v.file_path IS NOT NULL ORDER BY q.position LIMIT 1"
+    ).fetchone()
+
+
+def queue_play_now(conn: sqlite3.Connection, video_id: int, keep_current: bool) -> None:
+    if not _queueable(conn, video_id):
+        return
+    cur = queue_current(conn)
+    rest = [i for i in _queue_ids(conn) if i != video_id]
+    head = [video_id]
+    if cur is not None and cur["id"] != video_id:
+        if keep_current:
+            head.append(cur["id"])
+        rest = [i for i in rest if i != cur["id"]]
+    _queue_write(conn, head + rest)
+
+
+def queue_play_next(conn: sqlite3.Connection, video_id: int) -> None:
+    if not _queueable(conn, video_id):
+        return
+    cur = queue_current(conn)
+    ids = [i for i in _queue_ids(conn) if i != video_id]
+    idx = ids.index(cur["id"]) + 1 if cur is not None and cur["id"] in ids else 0
+    ids.insert(idx, video_id)
+    _queue_write(conn, ids)
+
+
+def queue_insert_at(conn: sqlite3.Connection, video_id: int, index: int) -> None:
+    if not _queueable(conn, video_id):
+        return
+    ids = [i for i in _queue_ids(conn) if i != video_id]
+    ids.insert(max(0, min(index, len(ids))), video_id)
+    _queue_write(conn, ids)
 
 
 def queue_list(conn: sqlite3.Connection) -> list[sqlite3.Row]:

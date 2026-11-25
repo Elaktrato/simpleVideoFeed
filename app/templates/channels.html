@@ -1,13 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Channels<p class="hint center">simpleVideoFeed v{{ version }}</p>
-{% endblock %}
+{% block title %}Channels{% endblock %}
 {% block content %}
+<header class="chead">
+  <a class="back" href="/"><svg class="i"><use href="#i-back"/></svg>Feed</a>
+  <h1>Channels</h1>
+</header>
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
 
-<section class="card">
+<section class="panel">
   <h2>Add a channel</h2>
   <form method="post" action="/channels" class="row">
-    <input type="text" name="url" placeholder="youtube.com/@channel or a video link" required autocomplete="off" inputmode="url">
+    <input type="text" name="url" placeholder="@channel or a video link" required autocomplete="off" inputmode="url">
     <select name="group_id" aria-label="Group">
       <option value="">No group</option>
       {% for g in groups %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
@@ -17,7 +20,7 @@
   <p class="hint">New channels pull in their last 7 days of uploads. Downloads run in the background.</p>
 </section>
 
-<section class="card">
+<section class="panel">
   <h2>Groups</h2>
   <ul class="groups">
     {% for g in groups %}
@@ -38,7 +41,7 @@
   </form>
 </section>
 
-<section class="card">
+<section class="panel">
   <h2>Your channels ({{ channels | length }})</h2>
   {% if not channels %}<p class="hint">No channels yet. Add one above.</p>{% endif %}
   <ul class="channels">

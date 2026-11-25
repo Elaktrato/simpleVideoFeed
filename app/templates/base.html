@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-open-video="{{ open_video or '' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -10,20 +10,51 @@
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/icon.svg">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="preload" href="/static/fonts/geist-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <script src="/static/js/nav.js" defer></script>
+  <script src="/static/js/player.js" defer></script>
+  <script src="/static/js/feed.js" defer></script>
 </head>
 <body>
-  <header class="top">
-    <nav>
-      <a href="/" class="{{ 'active' if page == 'feed' }}">Feed</a>
-      <a href="/queue" class="{{ 'active' if page == 'queue' }}">Queue (<span id="queue-count">{{ queue_count }}</span>)</a>
-      <a href="/channels" class="{{ 'active' if page == 'channels' }}">Channels</a>
-    </nav>
-  </header>
-  <main>
+  {% include "_icons.html" %}
+  <main id="main" data-title="{{ self.title() | striptags | trim }}">
     {% block content %}{% endblock %}
   </main>
+  <div id="player" hidden>
+    <div class="mini">
+      <div class="inner">
+        <button type="button" class="disc" data-p="expand" aria-label="Open player"><img alt="" hidden></button>
+        <button type="button" class="txt" data-p="expand"><span class="t"></span><span class="s"></span></button>
+        <button type="button" class="q" data-p="queue" aria-label="Up next"><svg class="i"><use href="#i-list"/></svg><span class="n">0</span></button>
+        <button type="button" class="play" data-p="toggle" aria-label="Play"><svg class="i fill"><use href="#i-play"/></svg></button>
+      </div>
+    </div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="Player" inert>
+      <div class="sheet-in">
+        <header class="sh-head">
+          <button type="button" class="ic" data-p="collapse" aria-label="Close player"><svg class="i"><use href="#i-chevron-down"/></svg></button>
+          <span>Now playing</span>
+        </header>
+        <div class="stage"></div>
+        <div class="sh-meta"><div class="ch"></div><h2 class="t"></h2></div>
+        <div class="sh-ctl">
+          <button type="button" class="ic" data-p="restart" aria-label="Restart"><svg class="i"><use href="#i-restart"/></svg></button>
+          <button type="button" class="play" data-p="toggle" aria-label="Play"><svg class="i fill"><use href="#i-play"/></svg></button>
+          <button type="button" class="ic" data-p="skip" aria-label="Skip"><svg class="i"><use href="#i-skip"/></svg></button>
+          <button type="button" class="pill done" data-p="done"><svg class="i"><use href="#i-check"/></svg>Done</button>
+        </div>
+        <section class="upnext" aria-label="Up next">
+          <h3>Up next</h3>
+          <ol></ol>
+          <p class="hint" hidden>Nothing queued after this one.</p>
+        </section>
+      </div>
+    </div>
+    <div class="vhold">
+      <video id="video" playsinline preload="metadata"></video>
+    </div>
+  </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="/static/app.js"></script>
 </body>
 </html>
