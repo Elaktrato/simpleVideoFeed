@@ -4,6 +4,8 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-25
+
 ### Added
 - Persistent player: videos keep playing while you browse, with a player bar at the bottom.
 - Full-screen player with ⏮ ⏯ ⏭, **✓ Done**, and an **Up next** list you can reorder or remove.
