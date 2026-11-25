@@ -4,6 +4,11 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 
 ## [Unreleased]
 
+### Changed
+- Python 3.15 base image (was 3.12).
+- GitHub Actions updated to their current major versions (no more Node.js 20 deprecation warnings).
+- Minimum versions raised to current releases: FastAPI 0.165, Starlette 1.10, Uvicorn 0.54, yt-dlp 2026.11.23, pytest 9.2.
+
 ## [1.0.0] - 2026-11-25
 
 ### Added
