@@ -4,6 +4,8 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-25
+
 ### Added
 - Channels you choose, optionally sorted into groups, with a per-channel toggle to include Shorts.
 - **Today** (last 24 h) and **This Week** (last 7 days) feeds, filterable by group, that end at "You're all caught up."
