@@ -56,6 +56,33 @@ Some servers get "Sign in to confirm you're not a bot" errors. If that happens:
 - Videos download one at a time as H.264/AAC MP4 (≤ `MAX_HEIGHT`) so they play on phones, including iPhone, and on laptops.
 - "Watched" means you played 90% of it or tapped **✓**. Playback position is saved, so you can resume on another device.
 
+## Versions and branches
+
+This repo uses **git-flow**:
+
+| Branch / tag | Purpose | Docker image tag |
+|---|---|---|
+| `main` | Released code only; every merge is a release | — |
+| `vX.Y.Z` tags on `main` | A release | `X.Y.Z`, `X.Y`, `X`, `latest` |
+| `develop` | Integration branch for the next release | `develop` |
+| `feature/*` | One branch per feature, merged into `develop` | — |
+| `release/X.Y.Z` | Release prep (version bump, changelog), merged into `main` and back into `develop` | — |
+| `hotfix/X.Y.Z` | Urgent fix off `main`, merged into `main` and `develop` | — |
+
+Portainer should normally track `latest`, which only moves on a release or the weekly yt-dlp rebuild. Pin a version such as `ghcr.io/elaktrato/simplevideofeed:1.0.0` if you want nothing to change under you. The version is shown at the bottom of the **Channels** page and at `/healthz`.
+
+To cut a release:
+
+```bash
+git checkout develop && git checkout -b release/1.1.0
+# bump __version__ in app/__init__.py, move "Unreleased" notes in CHANGELOG.md under 1.1.0, commit
+git checkout main && git merge --no-ff release/1.1.0 && git tag -a v1.1.0 -m "v1.1.0"
+git checkout develop && git merge --no-ff release/1.1.0 && git branch -d release/1.1.0
+git push origin main develop --follow-tags
+```
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
+
 ## Development
 
 ```bash

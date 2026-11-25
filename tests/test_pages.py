@@ -141,3 +141,9 @@ def test_css_respects_hidden_attribute(env):
     client, _ = env
     css = client.get("/static/style.css").text.replace(" ", "")
     assert "[hidden]{display:none!important;}" in css
+
+
+def test_footer_shows_version(env):
+    from app import __version__
+    client, _ = env
+    assert f"v{__version__}" in client.get("/channels").text

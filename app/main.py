@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import jobs, repo, youtube
+from app import __version__, jobs, repo, youtube
 from app.config import Settings, load_settings
 from app.db import connect, init_db
 
@@ -145,7 +145,7 @@ def create_app(
 
     @app.get("/healthz")
     def healthz():
-        return {"ok": True}
+        return {"ok": True, "version": __version__}
 
     # ---------- videos API ----------
 
@@ -154,14 +154,14 @@ def create_app(
         if repo.get_video(conn, video_id) is None:
             return _err(404, "No such video")
         repo.mark_watched(conn, video_id, now())
-        return {"ok": True}
+        return {"ok": True, "version": __version__}
 
     @app.delete("/api/videos/{video_id}/watched")
     def unwatched(video_id: int, conn=Depends(db)):
         if repo.get_video(conn, video_id) is None:
             return _err(404, "No such video")
         repo.unmark_watched(conn, video_id)
-        return {"ok": True}
+        return {"ok": True, "version": __version__}
 
     @app.post("/api/videos/{video_id}/progress")
     async def progress(video_id: int, request: Request, conn=Depends(db)):
@@ -182,7 +182,7 @@ def create_app(
         if v["status"] == "failed":
             repo.reset_attempts(conn, video_id)
             repo.set_status(conn, video_id, "pending")
-        return {"ok": True}
+        return {"ok": True, "version": __version__}
 
     # ---------- queue API ----------
 
@@ -306,7 +306,7 @@ def create_app(
 
     def render(request: Request, name: str, conn, **ctx) -> HTMLResponse:
         ctx.setdefault("queue_count", len(repo.queue_list(conn)))
-        return templates.TemplateResponse(request, name, {"now": now(), **ctx})
+        return templates.TemplateResponse(request, name, {"now": now(), "version": __version__, **ctx})
 
     @app.get("/", response_class=HTMLResponse)
     def feed_page(request: Request, tab: str = "today", group: str = "", conn=Depends(db)):

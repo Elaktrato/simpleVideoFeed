@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app import repo
+from app import __version__, repo
 from app.db import connect
 from app.feeds import feed_url
 from app.main import create_app
@@ -30,7 +30,12 @@ def ready_video(db, settings, now, yid="v1"):
 
 def test_healthz(env):
     client, _, _ = env
-    assert client.get("/healthz").json() == {"ok": True}
+    assert client.get("/healthz").json() == {"ok": True, "version": __version__}
+
+
+def test_version_is_semver():
+    import re
+    assert re.fullmatch(r"\d+\.\d+\.\d+", __version__)
 
 
 def test_progress_marks_watched_at_90(env, settings, now):

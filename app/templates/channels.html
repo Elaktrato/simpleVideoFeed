@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Channels{% endblock %}
+{% block title %}Channels<p class="hint center">simpleVideoFeed v{{ version }}</p>
+{% endblock %}
 {% block content %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
 
@@ -64,4 +65,5 @@
     {% endfor %}
   </ul>
 </section>
+<p class="hint center">simpleVideoFeed v{{ version }}</p>
 {% endblock %}

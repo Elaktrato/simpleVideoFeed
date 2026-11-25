@@ -2,8 +2,8 @@ name: test-and-publish
 
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
+    branches: [main, develop]
+    tags: ["v*.*.*"]
   pull_request:
   schedule:
     - cron: "17 4 * * 1"   # weekly rebuild so the image gets the newest yt-dlp
@@ -22,7 +22,10 @@ jobs:
 
   publish:
     needs: test
-    if: github.event_name != 'pull_request'
+    # Publish released versions (tags), the develop branch, and the weekly rebuild.
+    if: >-
+      github.event_name != 'pull_request' &&
+      (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/develop' || github.event_name != 'push')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,9 +43,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/simplevideofeed
+          flavor: latest=false
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
+            type=raw,value=develop,enable=${{ github.ref == 'refs/heads/develop' }}
       - uses: docker/build-push-action@v6
         with:
           context: .
