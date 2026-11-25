@@ -96,11 +96,11 @@ The anti-scroll goals of v1 still apply: a finite feed, no recommendations, noth
 ### Queue model (server)
 - The queue table keeps its ordering. **Item 1 is "current"**: the video loaded in the player, playing or paused.
 - New repo operations:
-  - `queue_play_now(video_id)`: makes the video item 1 and removes the old item 1 from the queue. The old video's `position_s` is already saved by progress reports, and it isn't marked watched.
+  - `queue_play_now(video_id, keep_current)`: makes the video current. The old current is removed from the queue if it was playing (`keep_current=False`), or moved to up next if it was paused or unstarted (`keep_current=True`). Either way it isn't marked watched and its `position_s` is kept.
   - `queue_play_next(video_id)`: inserts at position 2, or position 1 if the queue is empty. If the video is already queued, it moves there.
   - `queue_add(ids)`: unchanged; it appends.
 - New API endpoints:
-  - `POST /api/queue/play` with `{video_id}`
+  - `POST /api/queue/play` with `{video_id, keep_current}`
   - `POST /api/queue/next` with `{video_id}`
   - The existing `POST /api/queue`, move and delete endpoints stay.
   - All return the queue JSON, which is unchanged apart from adding `thumb` (local thumbnail URL or null) and `duration`.
@@ -146,4 +146,4 @@ The anti-scroll goals of v1 still apply: a finite feed, no recommendations, noth
 - **90% still marks a video watched** (v1 rule), but the *current* item stays in the queue until `ended`, ✓ Done or ⏭. `save_progress` stops removing the current item from the queue, and the queue JSON includes it even when it's watched.
 - **`/watch/{id}`** renders the feed with the expanded player open and that video loaded **paused**, because iOS needs a tap. It uses the same queue rule as ▶ Play.
 - **Undo after ✓** restores the video to its previous queue position: the client sends the position it had. ✓ on the current item from a card behaves like ✓ Done and advances.
-- **OPEN (owner):** what ▶ Play does to a loaded but paused or unstarted current item.
+- **▶ Play when the current item is paused or was never started (owner's decision):** the new video becomes current and the old one moves to **up next** (position 2), so nothing queued silently disappears. Only a video that is *playing* at that moment leaves the queue, as decided earlier. The client tells the server which case applies: `POST /api/queue/play {video_id, keep_current: bool}`.
