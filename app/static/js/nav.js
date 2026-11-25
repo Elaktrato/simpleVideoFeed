@@ -55,8 +55,7 @@
   document.addEventListener("submit", (e) => {
     const form = e.target;
     if (e.defaultPrevented || form.hasAttribute("data-native")) return;
-    const msg = form.dataset.confirm;
-    if (msg && !confirm(msg)) { e.preventDefault(); return; }
+    // data-confirm forms are confirmed inline by feed.js before they reach this point.
     e.preventDefault();
     const action = new URL(form.getAttribute("action") || location.href, location.href);
     const data = new URLSearchParams(new FormData(form, e.submitter));

@@ -17,6 +17,7 @@
   <script src="/static/js/feed.js" defer></script>
 </head>
 <body>
+  {% include "_icons.html" %}
   <main id="main" data-title="{{ self.title() | striptags | trim }}">
     {% block content %}{% endblock %}
   </main>

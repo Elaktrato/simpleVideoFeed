@@ -7,6 +7,7 @@ import re
 import sqlite3
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterator
 from urllib.parse import quote
@@ -344,7 +345,7 @@ def create_app(
         group_id = _group_or_none(group)
         t = now()
         return dict(
-            page="feed", tab=tab, group_id=group_id,
+            page="feed", tab=tab, weekday=datetime.fromtimestamp(t).strftime("%A"), group_id=group_id,
             groups=repo.list_groups(conn),
             videos=repo.feed(conn, tab, group_id, t),
             counts=repo.feed_counts(conn, group_id, t),
