@@ -88,23 +88,6 @@ def test_not_ready_item_has_no_play_link(env, settings, now):
     assert "failed — retry" in html
 
 
-def test_watch_page_has_video_and_resume_position(env, settings, now):
-    client, db = env
-    c = make_channel(db, now)
-    v = ready(db, settings, c, "w", now - H)
-    repo.save_progress(db, v, 42, 600, now)
-    html = client.get(f"/watch/{v}").text
-    assert 'src="/media/w.mp4"' in html and 'data-position="42' in html
-
-
-def test_watch_expired_shows_unavailable(env, settings, now):
-    client, db = env
-    c = make_channel(db, now)
-    v = make_video(db, c, "e", now - H, status="expired")
-    assert "This video is no longer available." in client.get(f"/watch/{v}").text
-    assert "This video is no longer available." in client.get("/watch/9999").text
-
-
 def test_channels_page_shows_error_param(env, now):
     client, db = env
     make_channel(db, now, title="Bake Lab")
@@ -113,33 +96,67 @@ def test_channels_page_shows_error_param(env, now):
     assert "Bake Lab" in html
 
 
-def test_queue_page_renders_items(env, settings, now):
+def test_queue_page_removed(env):
+    client, _ = env
+    assert client.get("/queue").status_code == 404
+
+
+def test_watch_renders_feed_with_open_video(env, settings, now):
     client, db = env
     c = make_channel(db, now)
-    v = ready(db, settings, c, "q", now - H, title="Queued one")
-    repo.queue_add(db, [v])
-    html = client.get("/queue").text
-    assert "Queued one" in html
-    assert 'Queue (<span id="queue-count">1</span>)' in html
+    v = ready(db, settings, c, "w", now - H)
+    html = client.get(f"/watch/{v}").text
+    assert f'data-open-video="{v}"' in html
+    assert "Your feed" in html
 
 
-def test_queue_page_empty(env):
+def test_watch_expired_shows_unavailable_banner(env, settings, now):
+    client, db = env
+    c = make_channel(db, now)
+    v = make_video(db, c, "e", now - H, status="expired")
+    for url in (f"/watch/{v}", "/watch/9999"):
+        html = client.get(url).text
+        assert 'class="banner error"' in html
+        assert "This video is no longer available." in html
+        assert 'data-open-video=""' in html
+
+
+def test_shell_has_single_video_and_player(env):
     client, _ = env
-    assert "Queue finished." in client.get("/queue").text
+    html = client.get("/").text
+    assert html.count("<video") == 1
+    assert 'id="player"' in html and 'id="video"' in html
+
+
+def test_no_third_party_hosts(env):
+    client, _ = env
+    for url in ("/", "/channels", "/static/css/app.css"):
+        text = client.get(url).text
+        for host in ("fonts.googleapis", "gstatic", "ytimg", "youtube.com"):
+            assert host not in text, (url, host)
+
+
+def test_fonts_served(env):
+    client, _ = env
+    r = client.get("/static/fonts/geist-latin-400-normal.woff2")
+    assert r.status_code == 200
+    assert r.headers["content-type"] in ("font/woff2", "application/octet-stream")
 
 
 def test_static_assets_served(env):
     client, _ = env
-    css = client.get("/static/style.css")
+    css = client.get("/static/css/app.css")
     assert css.status_code == 200 and "#1a1b26" in css.text
-    assert client.get("/static/app.js").status_code == 200
+    for js in ("nav", "player", "feed"):
+        assert client.get(f"/static/js/{js}.js").status_code == 200
     assert client.get("/static/manifest.webmanifest").status_code == 200
+    assert client.get("/static/style.css").status_code == 404
 
 
 def test_css_respects_hidden_attribute(env):
-    """Elements with display rules (.toast, .player, .bulk) must still hide via [hidden]."""
+    """Elements with display rules (.toast, #player) must still hide via [hidden]."""
     client, _ = env
-    css = client.get("/static/style.css").text.replace(" ", "")
+    css = client.get("/static/css/app.css").text.replace(" ", "")
     assert "[hidden]{display:none!important;}" in css
 
 

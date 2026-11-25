@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-open-video="{{ open_video or '' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -10,20 +10,19 @@
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/static/icon.svg">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="preload" href="/static/fonts/geist-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <script src="/static/js/nav.js" defer></script>
+  <script src="/static/js/player.js" defer></script>
+  <script src="/static/js/feed.js" defer></script>
 </head>
 <body>
-  <header class="top">
-    <nav>
-      <a href="/" class="{{ 'active' if page == 'feed' }}">Feed</a>
-      <a href="/queue" class="{{ 'active' if page == 'queue' }}">Queue (<span id="queue-count">{{ queue_count }}</span>)</a>
-      <a href="/channels" class="{{ 'active' if page == 'channels' }}">Channels</a>
-    </nav>
-  </header>
-  <main>
+  <main id="main" data-title="{{ self.title() | striptags | trim }}">
     {% block content %}{% endblock %}
   </main>
+  <div id="player" hidden>
+    <video id="video" playsinline preload="metadata"></video>
+  </div>
   <div id="toast" class="toast" hidden></div>
-  <script src="/static/app.js"></script>
 </body>
 </html>

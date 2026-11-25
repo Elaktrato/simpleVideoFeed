@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Today' if tab == 'today' else 'This Week' }}{% endblock %}
 {% block content %}
+{% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
+<h1>Your feed</h1>
 {% set gq = ('&group=' ~ group_id) if group_id else '' %}
 <div class="tabs" role="tablist">
   <a role="tab" href="/?tab=today{{ gq }}" class="tab {{ 'active' if tab == 'today' }}">Today ({{ counts.today }})</a>

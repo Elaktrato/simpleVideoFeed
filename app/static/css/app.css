@@ -1,16 +1,29 @@
-/* Tokyo Night (Night variant) */
+/* Tokyo Night (Night variant). Dark only. */
+@font-face { font-family: "Geist"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/static/fonts/geist-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Geist"; font-style: normal; font-weight: 500; font-display: swap;
+  src: url("/static/fonts/geist-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Geist"; font-style: normal; font-weight: 600; font-display: swap;
+  src: url("/static/fonts/geist-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Geist"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("/static/fonts/geist-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Geist Mono"; font-style: normal; font-weight: 500; font-display: swap;
+  src: url("/static/fonts/geist-mono-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-style: normal; font-weight: 500; font-display: swap;
+  src: url("/static/fonts/space-grotesk-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-style: normal; font-weight: 600; font-display: swap;
+  src: url("/static/fonts/space-grotesk-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Space Grotesk"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("/static/fonts/space-grotesk-latin-700-normal.woff2") format("woff2"); }
+
 :root {
-  --bg: #1a1b26;
-  --surface: #24283b;
-  --fg: #c0caf5;
-  --muted: #565f89;
-  --blue: #7aa2f7;
-  --purple: #bb9af7;
-  --cyan: #7dcfff;
-  --green: #9ece6a;
-  --red: #f7768e;
-  --orange: #ff9e64;
-  --line: #2f3549;
+  --bg: #1a1b26; --bg-deep: #16161e; --surface: #24283b; --surface-2: #292e42; --line: #2f3549;
+  --fg: #c0caf5; --fg-dim: #a9b1d6; --muted: #565f89;
+  --blue: #7aa2f7; --purple: #bb9af7; --cyan: #7dcfff; --green: #9ece6a;
+  --red: #f7768e; --orange: #ff9e64; --yellow: #e0af68;
+  --font-ui: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Space Grotesk", "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
   --radius: 10px;
   color-scheme: dark;
 }
@@ -19,30 +32,31 @@
 [hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 400 16px/1.45 var(--font-ui);
 }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing: -.01em; }
 a { color: var(--blue); text-decoration: none; }
+button { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
-main { max-width: 900px; margin: 0 auto; padding: 12px 16px 80px; }
-
-.top {
-  position: sticky; top: 0; z-index: 5;
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid var(--line);
-  padding-top: env(safe-area-inset-top);
+/* shell */
+main#main { max-width: 900px; margin: 0 auto; padding: calc(12px + env(safe-area-inset-top)) 16px 96px; }
+#player { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; }
+#player video { display: block; }
+.toast {
+  position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  z-index: 40; display: flex; gap: 12px; align-items: center;
+  background: var(--surface); border: 1px solid var(--line); color: var(--fg);
+  padding: 8px 8px 8px 16px; border-radius: var(--radius); box-shadow: 0 6px 24px rgba(0, 0, 0, .4);
+  max-width: calc(100vw - 32px);
 }
-.top nav { max-width: 900px; margin: 0 auto; display: flex; gap: 4px; padding: 6px 12px; }
-.top nav a {
-  color: var(--muted); padding: 10px 12px; min-height: 44px; border-radius: var(--radius);
-  display: inline-flex; align-items: center; font-weight: 600;
-}
-.top nav a.active { color: var(--fg); background: var(--surface); }
+.toast span { white-space: nowrap; }
+.toast button { color: var(--cyan); background: none; border: 0; min-height: 44px; padding: 0 12px; }
+.banner { padding: 12px 14px; border-radius: var(--radius); margin: 8px 0; }
+.banner.error { background: color-mix(in srgb, var(--red) 15%, var(--bg)); color: var(--red); }
 
+/* legacy feed/channels markup, replaced by the redesign in the next task */
 .tabs { display: flex; gap: 8px; margin: 8px 0 12px; }
 .tab {
   flex: 1; text-align: center; padding: 12px; min-height: 44px; border-radius: var(--radius);
@@ -59,7 +73,6 @@ main { max-width: 900px; margin: 0 auto; padding: 12px 16px 80px; }
 
 .bulk { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 
-.feed, .queue, .channels, .groups { list-style: none; margin: 0; padding: 0; }
 .item {
   display: grid; grid-template-columns: 1fr; gap: 10px;
   padding: 12px 0; border-bottom: 1px solid var(--line);
@@ -99,20 +112,6 @@ main { max-width: 900px; margin: 0 auto; padding: 12px 16px 80px; }
 .empty { text-align: center; color: var(--green); font-size: 18px; margin: 48px 0; }
 .center { text-align: center; }
 
-.player { margin: 4px -16px 12px; background: #000; }
-@media (min-width: 640px) { .player { margin: 4px 0 12px; border-radius: var(--radius); overflow: hidden; } }
-.player video { display: block; width: 100%; max-height: 70vh; background: #000; }
-.vtitle { font-size: 18px; margin: 4px 0; font-weight: 600; }
-
-.qitem {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 10px 0; border-bottom: 1px solid var(--line);
-}
-.qitem.playing .qtitle { color: var(--cyan); }
-.qtitle { min-width: 0; overflow-wrap: anywhere; }
-.qtitle small { display: block; color: var(--muted); }
-.qbtns { display: flex; gap: 6px; flex-shrink: 0; }
-
 .card { background: var(--surface); border-radius: var(--radius); padding: 14px 16px; margin: 12px 0; }
 .card h2 { font-size: 16px; margin: 0 0 10px; color: var(--purple); }
 .row { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -133,16 +132,3 @@ input[type=text], select {
 .ccontrols { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .check { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--muted); }
 .check input { width: 20px; height: 20px; accent-color: var(--blue); }
-
-.banner { padding: 12px 14px; border-radius: var(--radius); margin: 8px 0; }
-.banner.error { background: color-mix(in srgb, var(--red) 15%, var(--bg)); color: var(--red); }
-
-.toast {
-  position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%);
-  display: flex; gap: 12px; align-items: center;
-  background: var(--surface); border: 1px solid var(--line); color: var(--fg);
-  padding: 8px 8px 8px 16px; border-radius: var(--radius); box-shadow: 0 6px 24px rgba(0, 0, 0, .4);
-  max-width: calc(100vw - 32px);
-}
-.toast span { white-space: nowrap; }
-.toast button { color: var(--cyan); }

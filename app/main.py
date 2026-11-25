@@ -337,20 +337,23 @@ def create_app(
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
     def render(request: Request, name: str, conn, **ctx) -> HTMLResponse:
-        ctx.setdefault("queue_count", len(repo.queue_list(conn)))
         return templates.TemplateResponse(request, name, {"now": now(), "version": __version__, **ctx})
 
-    @app.get("/", response_class=HTMLResponse)
-    def feed_page(request: Request, tab: str = "today", group: str = "", conn=Depends(db)):
+    def feed_ctx(conn, tab: str, group: str, **extra) -> dict:
         tab = tab if tab in repo.WINDOWS else "today"
         group_id = _group_or_none(group)
         t = now()
-        return render(
-            request, "feed.html", conn, page="feed", tab=tab, group_id=group_id,
+        return dict(
+            page="feed", tab=tab, group_id=group_id,
             groups=repo.list_groups(conn),
             videos=repo.feed(conn, tab, group_id, t),
             counts=repo.feed_counts(conn, group_id, t),
+            **extra,
         )
+
+    @app.get("/", response_class=HTMLResponse)
+    def feed_page(request: Request, tab: str = "today", group: str = "", conn=Depends(db)):
+        return render(request, "feed.html", conn, **feed_ctx(conn, tab, group))
 
     @app.get("/watch/{video_id}", response_class=HTMLResponse)
     def watch_page(request: Request, video_id: int, conn=Depends(db)):
@@ -358,13 +361,12 @@ def create_app(
         playable = bool(
             v is not None and v["status"] == "ready" and v["file_path"] and Path(v["file_path"]).is_file()
         )
-        in_queue = any(r["id"] == video_id for r in repo.queue_list(conn))
-        return render(request, "watch.html", conn, page="watch", video=v, playable=playable, in_queue=in_queue)
-
-    @app.get("/queue", response_class=HTMLResponse)
-    def queue_page(request: Request, conn=Depends(db)):
-        items = repo.queue_list(conn)
-        return render(request, "queue.html", conn, page="queue", items=items, queue_count=len(items))
+        if playable:
+            return render(request, "feed.html", conn, **feed_ctx(conn, "today", ""), open_video=video_id)
+        return render(
+            request, "feed.html", conn,
+            **feed_ctx(conn, "today", "", error="This video is no longer available."),
+        )
 
     @app.get("/channels", response_class=HTMLResponse)
     def channels_page(request: Request, error: str = "", conn=Depends(db)):

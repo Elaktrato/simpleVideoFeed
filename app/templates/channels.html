@@ -1,13 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Channels<p class="hint center">simpleVideoFeed v{{ version }}</p>
-{% endblock %}
+{% block title %}Channels{% endblock %}
 {% block content %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
 
 <section class="card">
   <h2>Add a channel</h2>
   <form method="post" action="/channels" class="row">
-    <input type="text" name="url" placeholder="youtube.com/@channel or a video link" required autocomplete="off" inputmode="url">
+    <input type="text" name="url" placeholder="@channel or a video link" required autocomplete="off" inputmode="url">
     <select name="group_id" aria-label="Group">
       <option value="">No group</option>
       {% for g in groups %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
