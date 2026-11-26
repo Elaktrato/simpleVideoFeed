@@ -595,6 +595,12 @@ await step("19. card unfollow asks to confirm", async () => {
   ok("19. first tap changes nothing", JSON.stringify(await serverQueue()) === JSON.stringify([ids.b, ids.c]),
     JSON.stringify(await serverQueue()));
   await bp.keyboard.press("Escape");
+  await card.locator('[data-action="menu"]').click();
+  ok("19. closing the menu disarms it", !(await btn.textContent()).includes("Unfollow?"), await btn.textContent());
+  await btn.click();
+  ok("19. a single tap after reopening doesn't unfollow", JSON.stringify(await serverQueue()) === JSON.stringify([ids.b, ids.c]),
+    JSON.stringify(await serverQueue()));
+  await bp.keyboard.press("Escape");
 });
 
 // 20. Unfollow from the player: the playing video keeps playing, the channel's other items leave.

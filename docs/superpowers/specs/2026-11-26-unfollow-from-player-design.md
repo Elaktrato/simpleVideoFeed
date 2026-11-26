@@ -18,7 +18,7 @@
 
 **Design.**
 - **Database:** new column `channels.unfollowed_at INTEGER NULL`. `init_db` adds the column to existing databases with `ALTER TABLE … ADD COLUMN` when it is missing. Live installs already have data, so this migration is required.
-- **New repo function** `unfollow_channel(conn, channel_id, keep_video_id: int | None, now) -> None`. It sets `unfollowed_at` and removes the channel's videos from the queue, except `keep_video_id`.
+- **New repo function** `unfollow_channel(conn, channel_id, keep_video_id: int | None, now) -> bool` (False for an unknown channel → 404). It sets `unfollowed_at` and removes the channel's videos from the queue, except `keep_video_id`.
 - **Unfollowed channels are filtered out in four places:**
   - `list_channels`
   - `feed` and `feed_counts`

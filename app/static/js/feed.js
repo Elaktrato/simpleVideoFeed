@@ -80,6 +80,11 @@
     $$(".card .menu:not([hidden])").forEach((m) => {
       if (m === except) return;
       m.hidden = true;
+      m.querySelectorAll(".armed").forEach((b) => {
+        clearTimeout(b._timer);
+        b.classList.remove("armed");
+        if (b._label !== undefined) btnLabel(b).textContent = b._label;
+      });
       m.parentElement.querySelector('[data-action="menu"]')?.setAttribute("aria-expanded", "false");
     });
   }

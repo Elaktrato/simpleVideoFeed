@@ -183,3 +183,75 @@ def test_add_form_refollows_unfollowed_channel(env, now):
     r = client.post("/channels", data={"url": "https://www.youtube.com/@a", "group_id": ""}, follow_redirects=False)
     assert r.status_code == 303 and "error" not in r.headers["location"]
     assert [c["id"] for c in repo.list_channels(db)] == [a]
+
+
+# ---- final review fixes ----
+
+def test_unfollowed_pending_videos_are_not_downloaded(conn, settings, now, two):
+    a, b = two
+    make_video(conn, a, "a1", now - 2 * H, status="pending")
+    b1 = make_video(conn, b, "b1", now - H, status="pending")
+    repo.unfollow_channel(conn, a, None, now)
+    assert repo.claim_next_pending(conn, now)["id"] == b1
+    assert repo.claim_next_pending(conn, now) is None
+
+
+def test_cleanup_waits_for_inflight_download(conn, settings, now, two):
+    a, _ = two
+    make_video(conn, a, "a1", now - H, status="downloading")
+    repo.unfollow_channel(conn, a, None, now)
+    jobs.cleanup(conn, settings, now)
+    assert repo.get_channel(conn, a) is not None
+
+
+def test_download_of_deleted_video_removes_orphan_file(conn, settings, now, two):
+    a, _ = two
+    make_video(conn, a, "a1", now - H, status="pending")
+
+    class YT(FakeYT):
+        def download_video(self, video_id, videos_dir, max_height, cookies_file):
+            p = super().download_video(video_id, videos_dir, max_height, cookies_file)
+            conn.execute("DELETE FROM channels WHERE id = ?", (a,))  # channel removed mid-download
+            conn.commit()
+            return p
+
+    assert jobs.download_one(conn, settings, YT(), now) is True
+    assert not (settings.videos_dir / "a1.mp4").exists()
+
+
+def test_kept_video_can_still_be_pinned_and_reinserted(conn, settings, now, two):
+    a, b = two
+    b1 = make_video(conn, b, "b1", now - H, status="pending")
+    a1 = ready(conn, settings, a, "a1", now)
+    repo.queue_add(conn, [b1, a1])
+    repo.unfollow_channel(conn, a, a1, now)
+    repo.queue_play_now(conn, a1, True)
+    assert qids(conn) == [a1, b1]
+    repo.mark_watched(conn, a1, now)
+    repo.unmark_watched(conn, a1)
+    repo.queue_insert_at(conn, a1, 0)
+    assert qids(conn) == [a1, b1]
+
+
+def test_unfollowed_video_not_in_queue_still_refused(conn, settings, now, two):
+    a, _ = two
+    a1 = ready(conn, settings, a, "a1", now)
+    repo.unfollow_channel(conn, a, None, now)
+    repo.queue_play_now(conn, a1, True)
+    repo.queue_play_next(conn, a1)
+    assert qids(conn) == []
+
+
+def test_cleanup_does_not_delete_a_channel_refollowed_meanwhile(conn, settings, now, two, monkeypatch):
+    a, _ = two
+    repo.unfollow_channel(conn, a, None, now)
+    real = repo.unfollowed_channels_ready_to_delete
+
+    def racing(c):
+        ids = real(c)
+        repo.refollow_channel(c, "UCaaa", None)  # re-added between the read and the delete
+        return ids
+
+    monkeypatch.setattr(repo, "unfollowed_channels_ready_to_delete", racing)
+    jobs.cleanup(conn, settings, now)
+    assert repo.get_channel(conn, a) is not None

@@ -297,7 +297,7 @@ def create_app(
         except (youtube.YouTubeError, repo.AlreadyAdded) as e:
             return _back("/channels", str(e))
         background.add_task(
-            _with_db, lambda c: jobs.poll_channel(c, settings, repo.get_channel(c, cid), yt, now())
+            _with_db, lambda c: (ch := repo.get_channel(c, cid)) and jobs.poll_channel(c, settings, ch, yt, now())
         )
         return _back("/channels")
 
