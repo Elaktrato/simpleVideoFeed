@@ -8,6 +8,7 @@ A small, self-hosted YouTube feed for people who want to watch their channels **
 - Watched videos disappear. When you're through, the feed says **"You're all caught up."**
 - Videos keep playing while you browse. A player bar at the bottom shows progress; tap it for the full-screen player with ⏮ ⏯ ⏭, **✓ Done** and an **Up next** list you can reorder or remove.
 - **Play next** plays a video right after the current one. **+ Queue** adds it to the end. Lock-screen and headphone controls work too.
+- Changed your mind about a channel? Tap **Unfollow** next to its name in the player, or in a video's **⋯** menu. The video you're watching finishes; the rest of that channel disappears. Re-adding it on the Channels page brings it back.
 - Videos are deleted automatically: watched ones after a day, everything 14 days after upload.
 
 ## Run it with Portainer
@@ -54,7 +55,7 @@ Some servers get "Sign in to confirm you're not a bot" errors. If that happens:
 
 - Every channel's public RSS feed is checked every `POLL_MINUTES`. No API key is needed. Shorts and live streams are skipped (Shorts can be turned on per channel).
 - When you add a channel, its last 7 days of uploads are pulled in. Nothing older than a week is ever shown.
-- Videos download one at a time as H.264/AAC MP4 (≤ `MAX_HEIGHT`) so they play on phones, including iPhone, and on laptops.
+- Videos download one at a time as H.264/AAC MP4 (≤ `MAX_HEIGHT`) so they play on phones and laptops.
 - "Watched" means you played 90% of it or tapped **✓**. Playback position is saved, so you can resume on another device.
 
 ## Versions and branches
