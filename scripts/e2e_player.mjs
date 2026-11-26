@@ -582,6 +582,46 @@ await step("18. nav drops stale responses", async () => {
   await bp.unroute("**/channels");
 });
 
+// 19. Card ⋯ → Unfollow channel needs a second tap.
+await step("19. card unfollow asks to confirm", async () => {
+  await fresh([ids.b, ids.c]);
+  await bp.evaluate(() => window.Nav.go("/?tab=week"));
+  await bp.waitForSelector(".grid2");
+  const card = bp.locator(`.card:has([data-action="menu"][data-id="${ids.c}"])`).first();
+  await card.locator('[data-action="menu"]').click();
+  const btn = card.locator('[data-action="unfollow"]');
+  await btn.click();
+  ok("19. first tap shows Unfollow?", (await btn.textContent()).includes("Unfollow?"), await btn.textContent());
+  ok("19. first tap changes nothing", JSON.stringify(await serverQueue()) === JSON.stringify([ids.b, ids.c]),
+    JSON.stringify(await serverQueue()));
+  await bp.keyboard.press("Escape");
+});
+
+// 20. Unfollow from the player: the playing video keeps playing, the channel's other items leave.
+await step("20. unfollow from the sheet", async () => {
+  await fresh([ids.b, ids.c], { play: true });
+  await bPlaying(ids.b);
+  await bp.evaluate(() => window.Player.expand());
+  const btn = bp.locator('#player [data-p="unfollow"]');
+  ok("20. sheet shows Unfollow", await btn.isVisible());
+  await btn.click();
+  ok("20. first tap only arms", JSON.stringify(await serverQueue()) === JSON.stringify([ids.b, ids.c]));
+  await btn.click();
+  await bp.waitForFunction((c) => !window.Player.queue.includes(c), ids.c, { timeout: 3000 });
+  ok("20. queue is just b", JSON.stringify(await serverQueue()) === JSON.stringify([ids.b]), JSON.stringify(await serverQueue()));
+  ok("20. b still playing, same element", (await bAdvancing()).ok && (await bp.evaluate(() => document.querySelectorAll("video").length)) === 1);
+  const t = await bp.locator("#toast").textContent();
+  ok("20. toast says Unfollowed", /^\s*Unfollowed Circuit Notes/.test(t), t);
+  await bp.evaluate(() => { const v = document.getElementById("video"); v.currentTime = v.duration - 0.3; });
+  await bp.waitForFunction(() => window.Player.queue.length === 0, null, { timeout: 8000 });
+  ok("20. nothing from that channel plays after b", (await bp.evaluate(() => window.Player.currentId)) === null);
+  await bp.evaluate(() => window.Player.collapse());
+  await bp.evaluate(() => window.Nav.go("/?tab=week"));
+  await bp.waitForSelector(".hello");
+  const html = await bp.locator("#main").innerHTML();
+  ok("20. feed no longer shows the channel", !html.includes("Circuit Notes"));
+});
+
 await bctx.close();
 
 await browser.close();

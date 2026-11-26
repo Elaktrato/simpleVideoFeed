@@ -267,3 +267,19 @@ def test_shell_has_player_bar_and_sheet(env):
     assert player.count("<video") == 1  # the one <video> lives inside the player
     for icon in ("i-pause", "i-restart", "i-skip", "i-chevron-down", "i-x"):
         assert f'id="{icon}"' in html, icon
+
+
+def test_card_menu_has_unfollow(env, settings, now):
+    client, db = env
+    c = make_channel(db, now, title="Bake Lab")
+    ready(db, settings, c, "a", now - H)
+    ready(db, settings, c, "b", now - 2 * H)
+    html = client.get("/?tab=week").text
+    assert 'data-action="unfollow"' in html
+    assert f'data-channel="{c}"' in html
+    assert 'data-name="Bake Lab"' in html
+
+
+def test_player_sheet_has_unfollow_button(env):
+    client, _ = env
+    assert 'data-p="unfollow"' in client.get("/").text
