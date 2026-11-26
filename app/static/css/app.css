@@ -273,7 +273,16 @@ html.sheet-open { overscroll-behavior-y: none; }
 @media (min-width: 600px) { #player .stage { margin: 0; border-radius: 14px; } }
 #player .stage video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
 #player .sh-meta { margin: 16px 0 6px; }
-#player .sh-meta .ch { font-size: 11px; color: var(--cyan); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+#player .sh-meta .ch-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+#player .sh-meta .unfollow {
+  font: 600 11px var(--font-ui); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 999px;
+  padding: 3px 9px; cursor: pointer; flex: none;
+}
+#player .sh-meta .unfollow:hover, #player .sh-meta .unfollow:focus-visible { color: var(--red); border-color: var(--red); }
+#player .sh-meta .unfollow.armed, [data-action="unfollow"].armed { color: var(--red); border-color: var(--red); }
+.menu .danger, .pill.danger { color: var(--red); }
+#player .sh-meta .ch { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--cyan); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 #player .sh-meta .t { margin: 6px 0 0; font-size: 20px; line-height: 1.25; overflow-wrap: anywhere; }
 #player .sh-ctl { display: flex; align-items: center; gap: 10px; margin: 12px 0 8px; }
 #player .sh-ctl .play { width: 52px; height: 52px; }

@@ -4,6 +4,10 @@ All notable changes to this project are listed here. Versions follow [Semantic V
 
 ## [Unreleased]
 
+### Added
+- **Unfollow** a channel straight from the full-screen player or a video's ⋯ menu (tap twice to confirm). The video you're watching keeps playing; the channel's other videos leave the feed and queue right away, and its files are cleaned up afterwards.
+- Re-adding an unfollowed channel on the Channels page brings it back.
+
 ## [1.1.0] - 2026-11-25
 
 ### Added

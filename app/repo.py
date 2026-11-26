@@ -55,7 +55,9 @@ def add_channel(conn: sqlite3.Connection, info: ChannelInfo, group_id: int | Non
 
 def list_channels(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute(
-        _CHANNEL_SELECT + " ORDER BY g.name IS NULL, g.name COLLATE NOCASE, c.title COLLATE NOCASE"
+        _CHANNEL_SELECT
+        + " WHERE c.unfollowed_at IS NULL"
+        + " ORDER BY g.name IS NULL, g.name COLLATE NOCASE, c.title COLLATE NOCASE"
     ).fetchall()
 
 
@@ -80,8 +82,57 @@ def record_channel_check(conn: sqlite3.Connection, channel_id: int, now: int, er
     conn.commit()
 
 
-def delete_channel(conn: sqlite3.Connection, channel_id: int) -> list[str]:
-    """Delete a channel and its videos; returns file paths (videos + thumbs) to unlink."""
+def unfollow_channel(
+    conn: sqlite3.Connection, channel_id: int, keep_video_id: int | None, now: int
+) -> bool:
+    """Hide a channel and dequeue its videos, except keep_video_id (the one playing).
+
+    The channel and its files are deleted later by jobs.cleanup, once nothing of it is queued.
+    """
+    if conn.execute("SELECT 1 FROM channels WHERE id = ?", (channel_id,)).fetchone() is None:
+        return False
+    conn.execute("UPDATE channels SET unfollowed_at = ? WHERE id = ?", (now, channel_id))
+    conn.execute(
+        "DELETE FROM queue WHERE video_id IN (SELECT id FROM videos WHERE channel_id = ? AND id IS NOT ?)",
+        (channel_id, keep_video_id),
+    )
+    conn.commit()
+    return True
+
+
+def refollow_channel(conn: sqlite3.Connection, youtube_channel_id: str, group_id: int | None) -> int | None:
+    """Undo an unfollow that hasn't been cleaned up yet. Returns the channel id, or None."""
+    row = conn.execute(
+        "SELECT id FROM channels WHERE youtube_channel_id = ? AND unfollowed_at IS NOT NULL",
+        (youtube_channel_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    conn.execute("UPDATE channels SET unfollowed_at = NULL, group_id = ? WHERE id = ?", (group_id, row["id"]))
+    conn.commit()
+    return row["id"]
+
+
+def unfollowed_channels_ready_to_delete(conn: sqlite3.Connection) -> list[int]:
+    return [
+        r["id"]
+        for r in conn.execute(
+            "SELECT c.id FROM channels c WHERE c.unfollowed_at IS NOT NULL AND NOT EXISTS ("
+            " SELECT 1 FROM queue q JOIN videos v ON v.id = q.video_id WHERE v.channel_id = c.id)"
+            " AND NOT EXISTS (SELECT 1 FROM videos v WHERE v.channel_id = c.id AND v.status = 'downloading')"
+        )
+    ]
+
+
+def delete_channel(conn: sqlite3.Connection, channel_id: int, only_if_unfollowed: bool = False) -> list[str]:
+    """Delete a channel and its videos; returns file paths (videos + thumbs) to unlink.
+
+    only_if_unfollowed: do nothing if the channel was re-followed meanwhile (cleanup path).
+    """
+    if only_if_unfollowed and conn.execute(
+        "SELECT 1 FROM channels WHERE id = ? AND unfollowed_at IS NOT NULL", (channel_id,)
+    ).fetchone() is None:
+        return []
     paths: list[str] = []
     for r in conn.execute(
         "SELECT file_path, thumbnail_path FROM videos WHERE channel_id = ?", (channel_id,)
@@ -171,8 +222,10 @@ def claim_next_pending(conn: sqlite3.Connection, now: int) -> sqlite3.Row | None
     """
     row = conn.execute(
         "UPDATE videos SET status = 'downloading' WHERE id = ("
-        "  SELECT id FROM videos WHERE status = 'pending' AND attempts < ? AND next_attempt_at <= ?"
-        "  ORDER BY published_at ASC LIMIT 1"
+        "  SELECT v.id FROM videos v JOIN channels c ON c.id = v.channel_id"
+        "  WHERE v.status = 'pending' AND v.attempts < ? AND v.next_attempt_at <= ?"
+        "  AND c.unfollowed_at IS NULL"
+        "  ORDER BY v.published_at ASC LIMIT 1"
         ") AND status = 'pending' RETURNING *",
         (MAX_ATTEMPTS, now),
     ).fetchone()
@@ -200,6 +253,7 @@ def _feed_where(window: str, group_id: int | None, now: int) -> tuple[str, list]
     placeholders = ",".join("?" * len(VISIBLE_STATUSES))
     sql = (
         f" WHERE v.status IN ({placeholders}) AND v.watched_at IS NULL AND v.published_at >= ?"
+        " AND c.unfollowed_at IS NULL"
     )
     args: list = [*VISIBLE_STATUSES, now - WINDOWS[window]]
     if group_id is not None:
@@ -261,11 +315,7 @@ def save_progress(
 
 def queue_add(conn: sqlite3.Connection, video_ids: list[int]) -> None:
     for vid in video_ids:
-        row = conn.execute(
-            "SELECT watched_at FROM videos WHERE id = ? AND status NOT IN ('expired','skipped')",
-            (vid,),
-        ).fetchone()
-        if row is None or row["watched_at"] is not None:
+        if not _queueable(conn, vid):
             continue
         pos = conn.execute("SELECT COALESCE(MAX(position), 0) + 1 FROM queue").fetchone()[0]
         conn.execute("INSERT OR IGNORE INTO queue (video_id, position) VALUES (?, ?)", (vid, pos))
@@ -312,10 +362,18 @@ def _queue_write(conn: sqlite3.Connection, ids: list[int]) -> None:
     conn.commit()
 
 
-def _queueable(conn: sqlite3.Connection, video_id: int) -> bool:
+def _queueable(
+    conn: sqlite3.Connection, video_id: int, allow_queued: bool = False, allow_unfollowed: bool = False
+) -> bool:
+    """May this video enter the queue? allow_queued: a video already in the queue may always be
+    moved (e.g. the kept video of an unfollowed channel, or the current one past 90%)."""
+    if allow_queued and conn.execute("SELECT 1 FROM queue WHERE video_id = ?", (video_id,)).fetchone():
+        return True
     row = conn.execute(
-        "SELECT watched_at FROM videos WHERE id = ? AND status NOT IN ('expired','skipped')",
-        (video_id,),
+        "SELECT v.watched_at FROM videos v JOIN channels c ON c.id = v.channel_id"
+        " WHERE v.id = ? AND v.status NOT IN ('expired','skipped')"
+        " AND (? OR c.unfollowed_at IS NULL)",
+        (video_id, int(allow_unfollowed)),
     ).fetchone()
     return row is not None and row["watched_at"] is None
 
@@ -330,7 +388,7 @@ def queue_current(conn: sqlite3.Connection) -> sqlite3.Row | None:
 
 
 def queue_play_now(conn: sqlite3.Connection, video_id: int, keep_current: bool) -> None:
-    if not _queueable(conn, video_id):
+    if not _queueable(conn, video_id, allow_queued=True):
         return
     cur = queue_current(conn)
     rest = [i for i in _queue_ids(conn) if i != video_id]
@@ -343,7 +401,7 @@ def queue_play_now(conn: sqlite3.Connection, video_id: int, keep_current: bool) 
 
 
 def queue_play_next(conn: sqlite3.Connection, video_id: int) -> None:
-    if not _queueable(conn, video_id):
+    if not _queueable(conn, video_id, allow_queued=True):
         return
     cur = queue_current(conn)
     ids = [i for i in _queue_ids(conn) if i != video_id]
@@ -353,7 +411,9 @@ def queue_play_next(conn: sqlite3.Connection, video_id: int) -> None:
 
 
 def queue_insert_at(conn: sqlite3.Connection, video_id: int, index: int) -> None:
-    if not _queueable(conn, video_id):
+    # Only used by Undo, which puts back a video that was in the queue moments ago: that may be
+    # the kept video of a channel unfollowed while it played.
+    if not _queueable(conn, video_id, allow_queued=True, allow_unfollowed=True):
         return
     ids = [i for i in _queue_ids(conn) if i != video_id]
     ids.insert(max(0, min(index, len(ids))), video_id)

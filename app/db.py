@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS channels (
     include_shorts INTEGER NOT NULL DEFAULT 0,
     added_at INTEGER NOT NULL,
     last_checked_at INTEGER,
-    last_error TEXT
+    last_error TEXT,
+    unfollowed_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS videos (
     id INTEGER PRIMARY KEY,
@@ -56,6 +57,16 @@ def connect(path: Path | str) -> sqlite3.Connection:
     return conn
 
 
+# Columns added after the first release: (table, column, definition).
+MIGRATIONS = [
+    ("channels", "unfollowed_at", "INTEGER"),
+]
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    for table, column, definition in MIGRATIONS:
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
     conn.commit()

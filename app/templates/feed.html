@@ -49,6 +49,7 @@
       <button type="button" class="pill" data-action="queue" data-id="{{ p.id }}"><svg class="i"><use href="#i-plus"/></svg>Queue</button>
       {% endif %}
       <button type="button" class="pill" data-action="watched" data-id="{{ p.id }}" aria-label="Mark as watched"><svg class="i"><use href="#i-check"/></svg></button>
+      <button type="button" class="pill danger" data-action="unfollow" data-channel="{{ p.channel_id }}" data-name="{{ p.channel_title }}"><span>Unfollow</span></button>
     </div>
   </div>
 </section>
