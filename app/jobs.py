@@ -114,6 +114,10 @@ def download_one(conn: sqlite3.Connection, settings: Settings, yt, now: int) -> 
         repo.set_status(conn, video["id"], status, error=str(e))
         log.info("download of %s failed (%d): %s", video["youtube_video_id"], attempts, e)
         return True
+    if repo.get_video(conn, video["id"]) is None:
+        # Its channel was removed while downloading: nothing references the file any more.
+        _unlink(str(path))
+        return True
     repo.set_status(conn, video["id"], "ready", file_path=str(path))
     return True
 
@@ -154,6 +158,9 @@ def cleanup(conn: sqlite3.Connection, settings: Settings, now: int) -> int:
         )
         conn.execute("DELETE FROM queue WHERE video_id = ?", (v["id"],))
     conn.commit()
+    for channel_id in repo.unfollowed_channels_ready_to_delete(conn):
+        for path in repo.delete_channel(conn, channel_id, only_if_unfollowed=True):
+            deleted += _unlink(path)
     return deleted
 
 

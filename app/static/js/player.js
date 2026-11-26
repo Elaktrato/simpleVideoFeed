@@ -250,6 +250,13 @@
     }
     $(".sh-meta .t").textContent = shown.title;
     $(".sh-meta .ch").textContent = status;
+    const unf = $(".sh-meta .unfollow");
+    unf.hidden = !cur;
+    if (cur && unf.dataset.channel !== String(cur.channel_id)) {
+      unf.dataset.channel = String(cur.channel_id);
+      unf.dataset.name = cur.channel;
+      if (unf.classList.contains("armed")) { clearTimeout(unf._timer); unf.classList.remove("armed"); unf.textContent = "Unfollow"; }
+    }
     const upnext = queue.filter((i) => !cur || i.id !== cur.id);
     $(".mini .q .n").textContent = String(upnext.length);
     $(".mini .q").setAttribute("aria-label", `Up next: ${upnext.length}`);
@@ -489,6 +496,11 @@
       case "done": done().catch(fail); break;
       case "up": case "down":
         op(() => api("POST", `/api/queue/${id}/move`, { direction: b.dataset.p })).catch(fail); break;
+      case "unfollow":
+        if (window.TwoTap ? window.TwoTap.arm(b, "Unfollow?") : true) {
+          unfollow(Number(b.dataset.channel), b.dataset.name || "channel").catch(fail);
+        }
+        break;
       case "remove":
         op(() => api("DELETE", `/api/queue/${id}`)).then(quietReload, fail); break;
     }
@@ -602,8 +614,18 @@
     refresh().catch(() => {});
   });
 
+  // Unfollow a channel: its other videos leave the queue; the one playing (if it's theirs) keeps playing.
+  function unfollow(channelId, name) {
+    const cur = current();
+    const keep = cur && cur.channel_id === channelId ? cur.id : null;
+    return op(() => api("POST", `/api/channels/${channelId}/unfollow`, { keep_video_id: keep })).then(() => {
+      toast("Unfollowed " + (name || "channel"));
+      quietReload();
+    });
+  }
+
   window.Player = {
-    add, playNext, playNow, refresh, expand, collapse, skip, done, restart,
+    add, playNext, playNow, refresh, expand, collapse, skip, done, restart, unfollow,
     queueIndex: (id) => indexOf(id),
     get currentId() { return loadedId; },
     get queue() { return queue.map((i) => i.id); },

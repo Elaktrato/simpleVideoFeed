@@ -80,6 +80,11 @@
     $$(".card .menu:not([hidden])").forEach((m) => {
       if (m === except) return;
       m.hidden = true;
+      m.querySelectorAll(".armed").forEach((b) => {
+        clearTimeout(b._timer);
+        b.classList.remove("armed");
+        if (b._label !== undefined) btnLabel(b).textContent = b._label;
+      });
       m.parentElement.querySelector('[data-action="menu"]')?.setAttribute("aria-expanded", "false");
     });
   }
@@ -115,6 +120,42 @@
       },
     });
     setTimeout(() => window.Nav.reload(), 260);
+  }
+
+  // Two-tap confirm for buttons: the first tap arms (label changes for 4 s), the second returns true.
+  function armTwoTap(btn, armedLabel) {
+    if (btn.classList.contains("armed")) {
+      clearTimeout(btn._timer);
+      btn.classList.remove("armed");
+      if (btn._label !== undefined) btnLabel(btn).textContent = btn._label;
+      return true;
+    }
+    const lab = btnLabel(btn);
+    btn._label = lab.textContent;
+    lab.textContent = armedLabel;
+    btn.classList.add("armed");
+    clearTimeout(btn._timer);
+    btn._timer = setTimeout(() => {
+      btn.classList.remove("armed");
+      lab.textContent = btn._label;
+    }, 4000);
+    return false;
+  }
+  const btnLabel = (btn) => btn.querySelector("span") || btn;
+  window.TwoTap = { arm: armTwoTap };
+
+  async function unfollow(channelId, name) {
+    try {
+      if (window.Player?.unfollow) {
+        await window.Player.unfollow(channelId, name);
+        return;
+      }
+      await api("POST", `/api/channels/${channelId}/unfollow`, {});
+      toast("Unfollowed " + name);
+      window.Nav.reload();
+    } catch (e) {
+      toast("Couldn't unfollow");
+    }
   }
 
   async function run(action, id, el) {
@@ -176,6 +217,13 @@
       return;
     }
     if (el.disabled) return;
+    if (action === "unfollow") {
+      e.preventDefault();
+      if (!armTwoTap(el, "Unfollow?")) return; // first tap: keep the menu open and ask
+      closeMenus();
+      unfollow(Number(el.dataset.channel), el.dataset.name || "channel");
+      return;
+    }
     closeMenus();
     run(action, Number(el.dataset.id), el);
   });

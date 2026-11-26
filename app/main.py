@@ -199,6 +199,7 @@ def create_app(
                 "id": r["id"],
                 "title": r["title"],
                 "channel": r["channel_title"],
+                "channel_id": r["channel_id"],
                 "status": r["status"],
                 "position": r["position_s"],
                 "thumb": f"/thumbs/{r['youtube_video_id']}.jpg" if r["thumbnail_path"] else None,
@@ -290,13 +291,28 @@ def create_app(
             return _back("/channels", "Paste a channel link first")
         try:
             info = yt.resolve_channel(url, settings.cookies_file)
-            cid = repo.add_channel(conn, info, _group_or_none(group_id), now())
+            cid = repo.refollow_channel(conn, info.channel_id, _group_or_none(group_id))
+            if cid is None:
+                cid = repo.add_channel(conn, info, _group_or_none(group_id), now())
         except (youtube.YouTubeError, repo.AlreadyAdded) as e:
             return _back("/channels", str(e))
         background.add_task(
-            _with_db, lambda c: jobs.poll_channel(c, settings, repo.get_channel(c, cid), yt, now())
+            _with_db, lambda c: (ch := repo.get_channel(c, cid)) and jobs.poll_channel(c, settings, ch, yt, now())
         )
         return _back("/channels")
+
+    @app.post("/api/channels/{channel_id}/unfollow")
+    async def channel_unfollow(channel_id: int, request: Request, conn=Depends(db)):
+        keep = None
+        try:
+            body = await request.json()
+            if isinstance(body, dict) and isinstance(body.get("keep_video_id"), int):
+                keep = body["keep_video_id"]
+        except ValueError:
+            pass
+        if not repo.unfollow_channel(conn, channel_id, keep, now()):
+            return _err(404, "No such channel")
+        return _queue_json(conn)
 
     @app.post("/channels/{channel_id}/group")
     def channel_group(channel_id: int, group_id: str = Form(""), conn=Depends(db)):
