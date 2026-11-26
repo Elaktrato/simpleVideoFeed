@@ -154,6 +154,9 @@ def cleanup(conn: sqlite3.Connection, settings: Settings, now: int) -> int:
         )
         conn.execute("DELETE FROM queue WHERE video_id = ?", (v["id"],))
     conn.commit()
+    for channel_id in repo.unfollowed_channels_ready_to_delete(conn):
+        for path in repo.delete_channel(conn, channel_id):
+            deleted += _unlink(path)
     return deleted
 
 
